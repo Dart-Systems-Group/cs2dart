@@ -1,0 +1,19 @@
+# Files and directories created by pub
+.dart_tool/
+.packages
+build/
+
+# Directory created by dartdoc
+# If you don't generate documentation locally you can remove this line.
+doc/api/
+
+# Avoid committing generated Javascript files if compiling for web
+*.dart.js
+*.info.json
+
+# Environment variables (sensitive data)
+.env*
+
+# IDE-specific files (optional but recommended)
+.idea/
+*.iml

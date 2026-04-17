@@ -115,7 +115,6 @@ their Dart equivalents without any configuration, so that common patterns like `
    | C# Attribute (fully qualified) | Dart Annotation | Notes |
    |---|---|---|
    | `System.ObsoleteAttribute` | `@Deprecated('<message>')` | `message` from first positional arg; default `'Deprecated'` if absent |
-   | `System.Runtime.CompilerServices.OverrideAttribute` / `override` keyword | `@override` | Emitted as keyword, not annotation |
    | `System.SerializableAttribute` | `// UNMAPPED ATTRIBUTE: [Serializable]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.FlagsAttribute` | `// UNMAPPED ATTRIBUTE: [Flags]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.ComponentModel.DataAnnotations.RequiredAttribute` | `// UNMAPPED ATTRIBUTE: [Required]` + `CG` `Warning` | Requires `package:freezed` or user mapping |
@@ -131,7 +130,6 @@ their Dart equivalents without any configuration, so that common patterns like `
 2. WHEN a Known_Mapping requires a Dart package import (e.g., `json_annotation`), THE `Attribute_Mapper` SHALL add the corresponding `import` directive to the generated file and SHALL add the package to `pubspec.yaml` `dependencies` if not already present.
 3. THE built-in Known_Mapping table SHALL be versioned and documented; additions SHALL NOT be breaking changes.
 4. WHEN a Known_Mapping maps to `@Deprecated`, THE `Attribute_Mapper` SHALL use the first positional argument of the `Attribute_Node` as the deprecation message string; IF no positional argument is present, THE `Attribute_Mapper` SHALL emit `@Deprecated('Deprecated')`.
-5. WHEN a Known_Mapping maps to `@override`, THE `Attribute_Mapper` SHALL emit the `@override` annotation only when the IR `Method` node also has `IsOverride = true`; otherwise it SHALL emit the annotation and attach a `CG` `Warning` noting the mismatch.
 
 ---
 

@@ -63,9 +63,10 @@ without re-parsing C# source.
 #### Acceptance Criteria
 
 1. THE IR_Builder SHALL attach an IR_Symbol to every `Identifier`, `MemberAccessExpression`, `InvocationExpression`, `ObjectCreationExpression`, and type reference node.
-2. THE IR_Symbol SHALL contain: a fully-qualified name, the declaring assembly name, the kind (type, method, field, property, event, local, parameter), and a nullable source location.
+2. THE IR_Symbol SHALL contain: a fully-qualified name, the declaring assembly name, the kind (type, method, field, property, event, local, parameter), a nullable source location, and a nullable `SourcePackageId` string.
 3. WHEN a symbol refers to a type defined within the compilation unit, THE IR_Symbol SHALL include a reference to the corresponding Declaration IR_Node.
 4. WHEN a symbol refers to a type from an external assembly, THE IR_Symbol SHALL record the assembly name and fully-qualified CLR type name.
+4a. WHEN a symbol refers to a type whose assembly name matches a package in `Load_Result.PackageReferences`, THE IR_Builder SHALL set `IR_Symbol.SourcePackageId` to that package's ID so that the Dart code generator can resolve the correct import path without re-consulting the Mapping_Registry.
 5. IF the Roslyn_Model cannot resolve a symbol, THEN THE IR_Builder SHALL emit an `UnresolvedSymbol` node with the original identifier text and source span, and SHALL continue processing remaining nodes.
 6. THE IR_Builder SHALL resolve all overloaded method references to the specific overload selected by Roslyn, so that the IR contains no ambiguous method references.
 
@@ -201,7 +202,7 @@ so that the Project_Loader and the IR stage can evolve independently.
 1. THE IR_Builder SHALL accept a `Load_Result` as its sole input and SHALL read `Load_Result.Config` to obtain the `Mapping_Config` for the run; it SHALL NOT accept a raw `Compilation` or `Mapping_Config` as separate top-level arguments.
 2. THE IR_Builder SHALL iterate `Load_Result.Projects` in the order provided (topological, leaf-first) and produce one `IrCompilationUnit` per `Project_Entry`, collecting them into `IR_Build_Result.Units` in the same order.
 3. FOR EACH `Project_Entry`, THE IR_Builder SHALL read `Project_Entry.OutputKind`, `Project_Entry.TargetFramework`, `Project_Entry.LangVersion`, and `Project_Entry.NullableEnabled` and record them as metadata on the corresponding `IrCompilationUnit` so that the Dart code generator does not need to re-inspect the Roslyn `Compilation`.
-4. THE IR_Builder SHALL read `Project_Entry.PackageReferences` and attach the list to the `IrCompilationUnit` so that the NuGet dependency handler can map packages to Dart equivalents without accessing the `Compilation` directly.
+4. THE IR_Builder SHALL read `Project_Entry.PackageReferences` and attach the list to the `IrCompilationUnit` so that the NuGet dependency handler can map packages to Dart equivalents without accessing the `Compilation` directly. Each entry in the attached list SHALL include the `Tier` and `DartMapping` fields populated by the NuGet_Handler prior to IR_Builder invocation (per NuGet Requirement 13.4).
 5. THE IR_Builder SHALL not invoke Roslyn APIs that trigger re-parsing or re-binding; it SHALL read only from the already-computed `SemanticModel` within each `Project_Entry.Compilation`.
 6. THE IR_Builder SHALL process each `SyntaxTree` within a `Project_Entry.Compilation` in deterministic order (alphabetical by file path) to ensure Determinism.
 7. WHEN the Roslyn `SemanticModel` reports binding errors for a node, THE IR_Builder SHALL emit an `UnresolvedSymbol` or `UnsupportedNode` placeholder and SHALL continue processing remaining nodes rather than aborting.
@@ -277,6 +278,7 @@ errors early.
 6. THE IR_Validator SHALL verify that every `CatchClause` node within a `TryCatchStatement` that has a `WhenExpression` has that expression typed as `bool`.
 7. WHEN THE IR_Validator detects a violation, THE IR_Validator SHALL collect all violations and return them as a list of structured diagnostics rather than throwing on the first error.
 8. THE IR_Validator SHALL complete validation of any IR tree in time proportional to the number of IR nodes in the tree.
+9. THE IR_Validator SHALL verify that every `IR_Symbol` whose `AssemblyName` matches a package ID in `IrCompilationUnit.PackageReferences` carries a non-null `SourcePackageId` equal to that package ID (package symbol completeness invariant).
 
 ---
 

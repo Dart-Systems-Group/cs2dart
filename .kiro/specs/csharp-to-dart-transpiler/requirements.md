@@ -138,14 +138,21 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
 
 ## 8. Configuration model
 
+All transpiler configuration is managed by the **Configuration Service** (`IConfigService`), which parses and validates `transpiler.yaml` once at pipeline startup and exposes typed accessors to every pipeline module. No module may read `transpiler.yaml` directly.
+
 ### Transpiler config file (`transpiler.yaml`)
-- Library mappings
-- Naming conventions
-- Nullability rules
-- Async behavior
-- LINQ lowering strategy
-- NuGet mapping overrides
-- Experimental feature toggles
+- Library mappings (`libraryMappings`, `nugetMappings`)
+- Naming conventions (`namingConventions`)
+- Nullability rules (`nullability`)
+- Async behavior (`async`)
+- LINQ lowering strategy (`linqStrategy`)
+- NuGet feed and mapping overrides (`nugetFeedUrls`, `nugetMappings`)
+- Namespace mapping overrides (`namespaceMappings`, `rootNamespace`, `barrelFiles`, `autoResolveConflicts`)
+- Event mapping overrides (`eventStrategy`, `eventMappings`)
+- Struct mapping overrides (`structMappings`)
+- Experimental feature toggles (`experimentalFeatures`)
+
+See the **Transpiler Configuration Service** spec for the full `IConfigService` interface definition, all supported keys, default values, and validation rules.
 
 ---
 

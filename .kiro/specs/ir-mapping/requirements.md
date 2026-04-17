@@ -132,8 +132,8 @@ idiomatic Dart collection operations without understanding LINQ semantics.
 
 1. THE IR_Builder SHALL lower LINQ query syntax (e.g., `from x in xs where ... select ...`) to equivalent LINQ method-chain form before emitting IR nodes.
 2. THE IR_Builder SHALL represent each LINQ method call (`Where`, `Select`, `OrderBy`, `GroupBy`, `Join`, `Aggregate`, etc.) as an `InvocationExpression` IR node with the method resolved to its `System.Linq.Enumerable` or `System.Linq.Queryable` IR_Symbol.
-3. WHERE the transpiler configuration specifies `linq_strategy: lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
-4. WHERE the transpiler configuration specifies `linq_strategy: preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
+3. WHERE `IConfigService.linqStrategy` returns `lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
+4. WHERE `IConfigService.linqStrategy` returns `preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
 5. THE IR_Builder SHALL attach the element IR_Type and result IR_Type to every LINQ `InvocationExpression` node.
 
 ---
@@ -196,7 +196,7 @@ so that the Roslyn frontend and the IR stage can evolve independently.
 2. THE IR_Builder SHALL not invoke Roslyn APIs that trigger re-parsing or re-binding; it SHALL read only from the already-computed `SemanticModel`.
 3. THE IR_Builder SHALL process each `SyntaxTree` in a deterministic order (alphabetical by file path) to ensure Determinism.
 4. WHEN the Roslyn `SemanticModel` reports binding errors for a node, THE IR_Builder SHALL emit an `UnresolvedSymbol` or `UnsupportedNode` placeholder and SHALL continue processing remaining nodes rather than aborting.
-5. THE IR_Builder SHALL expose a single public entry point: `IrCompilationUnit Build(Compilation compilation)` (or language-equivalent), with no mutable global state.
+5. THE IR_Builder SHALL expose a single public entry point: `IrCompilationUnit Build(Compilation compilation, IConfigService config)` (or language-equivalent), with no mutable global state.
 6. THE IR_Builder SHALL complete processing of a single `SyntaxTree` without retaining references to Roslyn objects after that tree's IR subtree is emitted, to allow incremental memory release.
 
 ---

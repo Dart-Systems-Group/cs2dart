@@ -18,7 +18,7 @@ This document specifies the requirements for the **event mapping** subsystem of 
 - **Multicast_Delegate**: A C# delegate that holds an invocation list of multiple handlers; all C# events are multicast by default.
 - **BCL_Event**: A well-known event pattern from the .NET Base Class Library (e.g., `INotifyPropertyChanged.PropertyChanged`, `INotifyCollectionChanged.CollectionChanged`).
 - **Event_Strategy**: The configured output strategy for event translation: `stream` (default) or `callback`.
-- **Mapping_Config**: The optional user-supplied configuration in `transpiler.yaml` that overrides default event mapping behavior.
+- **Config_Service**: The `IConfigService` instance provided to the `Event_Transpiler` at construction time; the sole source of all event mapping configuration values. The `Event_Transpiler` SHALL NOT read `transpiler.yaml` directly.
 
 ---
 
@@ -119,7 +119,7 @@ This document specifies the requirements for the **event mapping** subsystem of 
 2. THE Event_Transpiler SHALL map `INotifyCollectionChanged.CollectionChanged` to a `Stream<CollectionChangedEventArgs> get onCollectionChanged`, where `CollectionChangedEventArgs` is a generated Dart class carrying `action`, `newItems`, and `oldItems` fields.
 3. THE Event_Transpiler SHALL map `System.ComponentModel.INotifyDataErrorInfo.ErrorsChanged` to a `Stream<String> get onErrorsChanged` that emits the property name.
 4. WHEN a BCL event has no direct idiomatic Dart equivalent, THE Event_Transpiler SHALL apply the default Event_Strategy and emit a `// TODO: review BCL event mapping for <EventName>` comment.
-5. THE Event_Transpiler SHALL allow BCL event mappings to be overridden via the `transpiler.yaml` configuration file under an `event_mappings` key.
+5. THE Event_Transpiler SHALL allow BCL event mappings to be overridden via `IConfigService.eventMappings`.
 
 ---
 
@@ -150,18 +150,20 @@ This document specifies the requirements for the **event mapping** subsystem of 
 
 ---
 
-### Requirement 11: Configuration
+### Requirement 11: Consume the Configuration Service
 
-**User Story:** As a developer, I want to configure event mapping behavior via `transpiler.yaml`, so that I can choose the appropriate Dart pattern for my project's needs.
+**User Story:** As a pipeline module author, I want the `Event_Transpiler` to receive all configuration values through `IConfigService`, so that it is decoupled from YAML parsing and file I/O.
 
 #### Acceptance Criteria
 
-1. THE Mapping_Config SHALL support an `event_strategy` key with values `stream` (default) or `callback`.
-2. THE Mapping_Config SHALL support a per-event override under `event_mappings` that maps a fully-qualified C# event name to a specific `strategy`, `dart_name`, or `dart_type` override.
-3. WHEN an `event_mappings` entry specifies a `dart_name`, THE Event_Transpiler SHALL use that name instead of the derived `on<EventName>` name.
-4. WHEN an `event_mappings` entry specifies a `dart_type`, THE Event_Transpiler SHALL use that Dart type string as the stream/callback payload type, overriding the derived type.
-5. WHEN an invalid `event_strategy` value is specified, THE Event_Transpiler SHALL emit a diagnostic error and fall back to the `stream` strategy.
-6. WHEN Mapping_Config is absent or empty, THE Event_Transpiler SHALL apply all default rules without error.
+1. THE Event_Transpiler SHALL accept an `IConfigService` instance at construction time and SHALL use it as the sole source of all configuration values.
+2. THE Event_Transpiler SHALL NOT read or parse `transpiler.yaml` directly; all configuration access SHALL go through `IConfigService`.
+3. WHEN `IConfigService.eventStrategy` returns `stream`, THE Event_Transpiler SHALL apply the stream-based strategy defined in Requirement 2.
+4. WHEN `IConfigService.eventStrategy` returns `callback`, THE Event_Transpiler SHALL apply the callback-based strategy.
+5. WHEN `IConfigService.eventMappings` contains an entry for a given C# event name with a `dart_name` override, THE Event_Transpiler SHALL use that name instead of the derived `on<EventName>` name.
+6. WHEN `IConfigService.eventMappings` contains an entry with a `dart_type` override, THE Event_Transpiler SHALL use that Dart type string as the stream/callback payload type.
+7. WHEN `IConfigService.eventMappings` contains an entry with a `strategy` override, THE Event_Transpiler SHALL use that strategy for the specific event, overriding the global `eventStrategy`.
+8. WHEN all `IConfigService` accessors return their Default_Values, THE Event_Transpiler SHALL apply all default rules without error.
 
 ---
 

@@ -89,16 +89,21 @@ stable.
 **User Story:** As a Dart developer reviewing generated code, I want C# attributes translated to
 their Dart annotation equivalents where a mapping exists, and preserved as structured comments
 where no mapping exists, so that the generated code is both correct and transparent about gaps.
+I also want to know when my custom mappings override built-in behavior, and when the same attribute
+appears in more than one tier, so there are no silent surprises.
 
 #### Acceptance Criteria
 
-1. THE `Attribute_Mapper` SHALL resolve each `Attribute_Node` using a three-tier lookup in the following priority order: (1) Custom_Mapping from `Mapping_Config.attribute_mappings`, (2) Package_Mapping derived from the NuGet package entry in `Mapping_Config.package_mappings`, (3) Known_Mapping from the built-in table.
+1. THE `Attribute_Mapper` SHALL resolve each `Attribute_Node` using a three-tier lookup in the following priority order: (1) Custom_Mapping from `Mapping_Config.attribute_mappings`, (2) Package_Mapping derived from the NuGet package entry in `Mapping_Config.package_mappings`, (3) Known_Mapping from the built-in table. The first tier that contains a match wins; lower tiers are not consulted.
 2. WHEN a Known_Mapping, Package_Mapping, or Custom_Mapping is found, THE `Attribute_Mapper` SHALL emit the corresponding Dart annotation expression immediately before the annotated declaration.
 3. WHEN no mapping is found for an `Attribute_Node`, THE `Attribute_Mapper` SHALL emit a `// UNMAPPED ATTRIBUTE: [<ShortName>(<args>)]` comment immediately before the annotated declaration and SHALL emit a `CG` `Warning` diagnostic carrying the `FullyQualifiedName`, the target declaration's source location, and a message indicating the attribute was not mapped.
 4. THE `Attribute_Mapper` SHALL NOT silently drop any `Attribute_Node`; every node MUST result in either a Dart annotation or an unmapped comment.
 5. WHEN an `Attribute_Node` has `Target = Assembly` or `Target = Module`, THE `Attribute_Mapper` SHALL emit the annotation or unmapped comment at the top of the generated barrel file (`lib/<package_name>.dart`), before any `export` directives.
 6. WHEN an `Attribute_Node` has `Target = ReturnValue`, THE `Attribute_Mapper` SHALL emit the annotation or unmapped comment on the line immediately preceding the method's return type in the generated Dart method signature, using a `// RETURN VALUE ATTRIBUTE:` prefix for unmapped cases.
 7. THE `Attribute_Mapper` SHALL process multiple attributes on the same declaration in the same order as the `Attribute_Node` list on the IR node (source-declaration order).
+8. WHEN a Custom_Mapping entry matches an `Attribute_Node` whose `FullyQualifiedName` also appears in a Package_Mapping or Known_Mapping, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Custom_Mapping overrides the lower-tier mapping, identifying the winning tier, the shadowed tier, and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
+9. WHEN a Package_Mapping entry (populated by the NuGet_Handler) matches an `Attribute_Node` whose `FullyQualifiedName` also appears in the Known_Mapping table, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Package_Mapping overrides the Known_Mapping, identifying both tiers and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
+10. WHEN the same `FullyQualifiedName` appears in more than one tier (Custom, Package, or Known), THE `Attribute_Mapper` SHALL emit exactly one cross-tier collision diagnostic per unique `FullyQualifiedName` per pipeline run, regardless of how many `Attribute_Node` instances carry that name (no duplicate collision diagnostics).
 
 ---
 
@@ -107,6 +112,13 @@ where no mapping exists, so that the generated code is both correct and transpar
 **User Story:** As a Dart developer, I want well-known C# attributes automatically translated to
 their Dart equivalents without any configuration, so that common patterns like `[Obsolete]` and
 `[JsonProperty]` just work out of the box.
+
+> **Tier placement note:** The Known_Mapping table covers only BCL and language-level attributes
+> that have no associated NuGet package. Attributes from packages that the NuGet_Handler already
+> handles (e.g., `Newtonsoft.Json`, `System.Text.Json`, `xunit`, `NUnit`, `MSTest`) are
+> intentionally absent from this table; their mappings live exclusively in the Package tier
+> (Requirement 9). Placing the same attribute in both tiers would create a cross-tier collision
+> (see Requirement 3.9) and is therefore avoided by design.
 
 #### Acceptance Criteria
 
@@ -117,15 +129,7 @@ their Dart equivalents without any configuration, so that common patterns like `
    | `System.ObsoleteAttribute` | `@Deprecated('<message>')` | `message` from first positional arg; default `'Deprecated'` if absent |
    | `System.SerializableAttribute` | `// UNMAPPED ATTRIBUTE: [Serializable]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.FlagsAttribute` | `// UNMAPPED ATTRIBUTE: [Flags]` + `CG` `Info` | No Dart equivalent; info-level only |
-   | `System.ComponentModel.DataAnnotations.RequiredAttribute` | `// UNMAPPED ATTRIBUTE: [Required]` + `CG` `Warning` | Requires `package:freezed` or user mapping |
-   | `Newtonsoft.Json.JsonPropertyAttribute` | `@JsonKey(name: '<name>')` | Requires `json_annotation` import; `name` from first positional or `PropertyName` named arg |
-   | `Newtonsoft.Json.JsonIgnoreAttribute` | `@JsonKey(includeFromJson: false, includeToJson: false)` | Requires `json_annotation` import |
-   | `System.Text.Json.Serialization.JsonPropertyNameAttribute` | `@JsonKey(name: '<name>')` | Requires `json_annotation` import |
-   | `System.Text.Json.Serialization.JsonIgnoreAttribute` | `@JsonKey(includeFromJson: false, includeToJson: false)` | Requires `json_annotation` import |
-   | `Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute` | `// UNMAPPED ATTRIBUTE: [TestClass]` + `CG` `Info` | Test framework; no direct Dart equivalent |
-   | `Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute` | `// UNMAPPED ATTRIBUTE: [TestMethod]` + `CG` `Info` | Test framework; no direct Dart equivalent |
-   | `Xunit.FactAttribute` | `// UNMAPPED ATTRIBUTE: [Fact]` + `CG` `Info` | Test framework; no direct Dart equivalent |
-   | `Nunit.Framework.TestAttribute` | `// UNMAPPED ATTRIBUTE: [Test]` + `CG` `Info` | Test framework; no direct Dart equivalent |
+   | `System.ComponentModel.DataAnnotations.RequiredAttribute` | `// UNMAPPED ATTRIBUTE: [Required]` + `CG` `Warning` | Requires `package:freezed` or user mapping; handled here because DataAnnotations is a BCL namespace with no separate NuGet package tier entry |
 
 2. WHEN a Known_Mapping requires a Dart package import (e.g., `json_annotation`), THE `Attribute_Mapper` SHALL add the corresponding `import` directive to the generated file and SHALL add the package to `pubspec.yaml` `dependencies` if not already present.
 3. THE built-in Known_Mapping table SHALL be versioned and documented; additions SHALL NOT be breaking changes.
@@ -222,7 +226,8 @@ is needed for well-known packages.
 
 **User Story:** As a transpiler user, I want clear, actionable diagnostics for every attribute
 mapping decision, so that I know exactly which attributes were mapped, which were not, and what
-configuration I need to add to handle the gaps.
+configuration I need to add to handle the gaps. I also want to be told when my custom mappings
+override built-in behavior, or when the same attribute appears in more than one tier.
 
 #### Acceptance Criteria
 
@@ -233,6 +238,8 @@ configuration I need to add to handle the gaps.
 5. THE `Attribute_Mapper` SHALL NOT emit duplicate diagnostics for the same `FullyQualifiedName` and target declaration.
 6. WHEN a Known_Mapping, Package_Mapping, or Custom_Mapping is successfully applied, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic recording the mapping decision (from-attribute, to-annotation, mapping tier) so that the mapping report is complete.
 7. THE `Attribute_Mapper` SHALL aggregate all diagnostics into `Gen_Result.Diagnostics` rather than writing to standard output or throwing exceptions.
+8. WHEN a cross-tier collision is detected (the same `FullyQualifiedName` appears in more than one tier), THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic identifying: the `FullyQualifiedName`, the winning tier, the shadowed tier(s), and — when the winning tier is Custom — a note that the user's mapping is in effect. This diagnostic SHALL be emitted at most once per unique `FullyQualifiedName` per pipeline run.
+9. THE `Attribute_Mapper` SHALL NOT emit a cross-tier collision diagnostic for `FullyQualifiedName` values that appear only in one tier; the diagnostic is only for genuine multi-tier overlaps.
 
 ---
 
@@ -251,3 +258,5 @@ a wide range of C# attribute inputs.
 5. FOR ALL `Attribute_Node` instances that result in an Unmapped_Attribute comment, exactly one `CG` `Warning` diagnostic SHALL be present in `Gen_Result.Diagnostics` for that node (diagnostic completeness property).
 6. FOR ALL Custom_Mapping entries in `transpiler.yaml`, the `Attribute_Mapper` SHALL apply the Custom_Mapping in preference to any Known_Mapping or Package_Mapping for the same `FullyQualifiedName` (custom mapping priority property).
 7. FOR ALL valid `transpiler.yaml` files containing an `attribute_mappings` section, parsing then serializing then parsing SHALL produce a value-equal `attributeMappings` map (config round-trip property).
+8. FOR ALL `FullyQualifiedName` values that appear in more than one tier, exactly one cross-tier collision `CG` `Info` diagnostic SHALL be present in `Gen_Result.Diagnostics` per pipeline run, regardless of how many `Attribute_Node` instances carry that name (cross-tier collision deduplication property).
+9. FOR ALL `FullyQualifiedName` values that appear in exactly one tier, no cross-tier collision diagnostic SHALL be present in `Gen_Result.Diagnostics` (no spurious collision diagnostic property).

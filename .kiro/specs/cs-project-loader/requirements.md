@@ -11,11 +11,12 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 - **IR_Builder**: The downstream component that consumes a `Load_Result` and produces the language-agnostic intermediate representation.
 - **Solution**: A `.sln` file that groups one or more C# projects.
 - **Project**: A single `.csproj` file representing one compilable unit.
-- **NuGet_Resolver**: The sub-component responsible for locating and restoring NuGet package assemblies.
+- **NuGet_Handler**: The transpiler subsystem responsible for resolving, classifying, and mapping NuGet package references. Invoked by the `Project_Loader` during package reference resolution; its `NR`-prefixed diagnostics flow into `Load_Result.Diagnostics`. Full contract defined in the NuGet Dependency Handling specification.
+- **NuGet_Resolver**: The sub-component of the `NuGet_Handler` responsible for locating and restoring NuGet package assemblies from the local cache or configured feeds.
 - **SDK_Resolver**: The sub-component responsible for locating the .NET SDK and its reference assemblies.
-- **Diagnostic**: A pipeline-wide structured record emitted by any transpiler component. Every `Diagnostic` contains: `Severity` (one of `Error`, `Warning`, `Info`), `Code` (a string in the format `<prefix><4-digit-number>`, e.g. `PL0001`), `Message` (human-readable string), `Source` (optional file path), and `Location` (optional line and column numbers). Components use reserved code prefixes to avoid collisions: `PL` for Project_Loader, `IR` for IR_Builder, `CG` for code generator.
+- **Diagnostic**: A pipeline-wide structured record emitted by any transpiler component. Every `Diagnostic` contains: `Severity` (one of `Error`, `Warning`, `Info`), `Code` (a string in the format `<prefix><4-digit-number>`, e.g. `PL0001`), `Message` (human-readable string), `Source` (optional file path), and `Location` (optional line and column numbers). Reserved code prefixes are defined in the top-level transpiler specification; the `Project_Loader` uses the `PL` prefix (`PL0001`–`PL9999`).
 - **Dependency_Graph**: A directed acyclic graph of `Project_Entry` nodes representing inter-project dependencies, used to determine topological processing order.
-- **Project_Entry**: A record within `Load_Result` representing one loaded project. Contains: `ProjectPath` (absolute path to the `.csproj` file), `ProjectName` (assembly name), `TargetFramework` (resolved TFM string, e.g. `net8.0`), `OutputKind` (one of `Exe`, `Library`, `WinExe`), `LangVersion` (resolved C# language version string), `NullableEnabled` (boolean), `Compilation` (the Roslyn `CSharpCompilation` for this project), `PackageReferences` (list of `{ PackageName, Version }` records for resolved NuGet packages), and `Diagnostics` (list of `Diagnostic` items scoped to this project).
+- **Project_Entry**: A record within `Load_Result` representing one loaded project. Contains: `ProjectPath` (absolute path to the `.csproj` file), `ProjectName` (assembly name), `TargetFramework` (resolved TFM string, e.g. `net8.0`), `OutputKind` (one of `Exe`, `Library`, `WinExe`), `LangVersion` (resolved C# language version string), `NullableEnabled` (boolean), `Compilation` (the Roslyn `CSharpCompilation` for this project), `PackageReferences` (list of `{ PackageName, Version, Tier, DartMapping }` records for resolved NuGet packages, where `Tier` is 1, 2, or 3 and `DartMapping` is a nullable `Dart_Mapping` record populated by the `NuGet_Handler`), and `Diagnostics` (list of `Diagnostic` items scoped to this project).
 - **Load_Result**: The complete output of the `Project_Loader`. Contains: `Projects` (ordered list of `Project_Entry` items in topological dependency order, leaf projects first), `DependencyGraph` (the full `Dependency_Graph`), `Diagnostics` (aggregated list of all `Diagnostic` items from all sub-components), `Success` (boolean, true when no `Diagnostic` of severity `Error` is present), and `Config` (the active Config_Object from the Config_Service, never null; contains Default_Values when no `transpiler.yaml` was found).
 - **Config_Service**: The `IConfigService` instance provided to the `Project_Loader` at construction time; the sole source of all configuration values. The `Project_Loader` SHALL NOT read `transpiler.yaml` directly.
 
@@ -57,11 +58,11 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 #### Acceptance Criteria
 
-1. WHEN a `.csproj` file contains `<PackageReference>` elements, THE `NuGet_Resolver` SHALL locate the corresponding assemblies in the local NuGet cache or restore them from the configured feed.
+1. WHEN a `.csproj` file contains `<PackageReference>` elements, THE `NuGet_Handler` SHALL locate the corresponding assemblies in the local NuGet cache or restore them from the configured feed, classify each package into a tier, and populate the `Tier` and `DartMapping` fields on the corresponding `PackageReferences` entry.
 2. WHEN a package is successfully resolved, THE `Project_Loader` SHALL add the package's reference assemblies as `MetadataReference` entries in the `Compilation`.
-3. IF a package cannot be resolved after exhausting all configured feeds, THEN THE `NuGet_Resolver` SHALL emit a `Diagnostic` of severity `Error` identifying the package name and version, and THE `Project_Loader` SHALL continue loading remaining references.
-4. THE `NuGet_Resolver` SHALL resolve transitive dependencies and include their assemblies in the `Compilation`.
-5. WHERE the `Config_Service` returns a non-empty `nugetFeedUrls` list, THE `NuGet_Resolver` SHALL query those feeds in order before falling back to `nuget.org`.
+3. IF a package cannot be resolved after exhausting all configured feeds, THEN THE `NuGet_Handler` SHALL emit a `Diagnostic` of severity `Error` (with an `NR`-prefixed code) identifying the package name and version, and THE `Project_Loader` SHALL continue loading remaining references.
+4. THE `NuGet_Handler` SHALL resolve transitive dependencies and include their assemblies in the `Compilation`.
+5. WHERE the `Config_Service` returns a non-empty `nugetFeedUrls` list, THE `NuGet_Handler` SHALL query those feeds in order before falling back to `nuget.org`.
 
 ---
 
@@ -113,9 +114,22 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 #### Acceptance Criteria
 
 1. THE `Project_Loader` SHALL represent every diagnostic as a `Diagnostic` record conforming to the pipeline-wide schema: `Severity` (`Error`, `Warning`, `Info`), `Code` (string), `Message` (string), optional `Source` (file path), and optional `Location` (line and column).
-2. WHEN loading completes, `Load_Result.Diagnostics` SHALL contain the union of all `Diagnostic` objects emitted during loading, including those from the `NuGet_Resolver`, `SDK_Resolver`, and all `Project_Entry.Diagnostics` lists.
+2. WHEN loading completes, `Load_Result.Diagnostics` SHALL contain the union of all `Diagnostic` objects emitted during loading, including those from the `NuGet_Handler` (`NR`-prefixed), `SDK_Resolver`, and all `Project_Entry.Diagnostics` lists.
 3. THE `Project_Loader` SHALL set `Load_Result.Success = true` if and only if `Load_Result.Diagnostics` contains no entry with `Severity = Error`.
-4. THE `Project_Loader` SHALL assign diagnostic codes in the range `PL0001`–`PL9999`; no other pipeline component SHALL use the `PL` prefix.
+4. THE `Project_Loader` SHALL assign diagnostic codes in the range `PL0001`–`PL9999`; no other pipeline component SHALL use the `PL` prefix. `NR`-prefixed diagnostics emitted by the `NuGet_Handler` are included in `Load_Result.Diagnostics` but are not renumbered.
+
+---
+
+### Requirement 8: Determinism
+
+**User Story:** As a CI/CD pipeline operator, I want the `Project_Loader` to produce identical output for identical inputs on every run, so that build caches and golden-file tests remain stable.
+
+#### Acceptance Criteria
+
+1. THE `Project_Loader` SHALL produce an identical `Load_Result` for identical input file paths and `IConfigService` state regardless of execution environment, OS, or process ID.
+2. THE `Project_Loader` SHALL process `Project_Entry` items in a deterministic topological order; WHEN multiple valid topological orderings exist, THE `Project_Loader` SHALL break ties alphabetically by `ProjectPath`.
+3. THE `Project_Loader` SHALL NOT embed timestamps, process IDs, random values, or other environment-dependent data in any `Load_Result` field.
+4. FOR ALL valid input paths and `IConfigService` instances, invoking `Load` twice SHALL produce `Load_Result` values where `Success`, the count of `Diagnostics`, and the set of `Project_Entry.ProjectName` values are identical (determinism property).
 
 ---
 
@@ -128,6 +142,6 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 1. THE `Project_Loader` SHALL accept an `IConfigService` instance at construction time and SHALL use it as the sole source of all configuration values.
 2. THE `Project_Loader` SHALL NOT read or parse `transpiler.yaml` directly; all configuration access SHALL go through `IConfigService`.
 3. WHEN `IConfigService.sdkPath` returns a non-null value, THE `SDK_Resolver` SHALL use that path for SDK resolution.
-4. WHEN `IConfigService.nugetFeedUrls` returns a non-empty list, THE `NuGet_Resolver` SHALL query those feeds in the returned order before falling back to `nuget.org`.
+4. WHEN `IConfigService.nugetFeedUrls` returns a non-empty list, THE `NuGet_Handler` SHALL query those feeds in the returned order before falling back to `nuget.org`.
 5. FOR ALL valid `IConfigService` instances, constructing a `Project_Loader` with the same instance and loading the same project SHALL produce an equivalent `Load_Result` (determinism under config).
 6. THE `Project_Loader` SHALL store the Config_Object obtained from `IConfigService.config` in `Load_Result.Config` so that downstream stages can inspect the active configuration without holding a reference to `IConfigService`.

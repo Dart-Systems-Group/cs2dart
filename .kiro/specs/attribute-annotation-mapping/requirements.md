@@ -11,14 +11,18 @@ Framework), test frameworks (xUnit, NUnit, MSTest), and many other real-world .N
 The current pipeline silently drops all C# attributes, causing silent semantic divergence in the
 generated Dart code. This feature closes that gap by:
 
-1. Capturing every C# attribute in the IR as a first-class `Attribute` node (never silently dropped).
-2. Emitting known attributes as their Dart annotation equivalents in the Dart code generator.
-3. Mapping package-level attributes via the existing `Mapping_Config` / NuGet handler integration.
-4. Preserving unknown attributes as structured comments with `CG` `Warning` diagnostics.
-5. Allowing users to define custom attribute mappings in `transpiler.yaml`.
+1. **Extracting** every C# attribute in the Roslyn Frontend as structured plain-data records (never silently dropped), including full resolution of fully-qualified names and argument values.
+2. **Promoting** the extracted attribute records into first-class `Attribute_Node` IR nodes in the IR_Builder, so downstream stages operate purely on IR.
+3. Emitting known attributes as their Dart annotation equivalents in the Dart code generator.
+4. Mapping package-level attributes via the existing `Mapping_Config` / NuGet handler integration.
+5. Preserving unknown attributes as structured comments with `CG` `Warning` diagnostics.
+6. Allowing users to define custom attribute mappings in `transpiler.yaml`.
 
-This feature spans three pipeline stages: the **IR_Builder** (capture), the **Dart_Generator**
-(emission), and the **Config_Service** (custom mapping configuration).
+This feature spans four pipeline stages: the **Roslyn_Frontend** (extraction), the **IR_Builder**
+(promotion to IR nodes), the **Dart_Generator** (emission), and the **Config_Service** (custom
+mapping configuration). Responsibility is strictly separated: the Roslyn_Frontend is the only stage
+that calls Roslyn APIs and owns all attribute extraction; the IR_Builder reads the pre-extracted
+structured data and promotes it into IR nodes without consulting Roslyn.
 
 ---
 
@@ -34,7 +38,7 @@ This feature spans three pipeline stages: the **IR_Builder** (capture), the **Da
 - **Package_Mapping**: An attribute mapping derived from the NuGet package's `Attribute_Mapping` entry in `Mapping_Config.package_mappings` (e.g., `Newtonsoft.Json.JsonPropertyAttribute` → `@JsonKey(...)`).
 - **Custom_Mapping**: A user-defined attribute mapping declared in the `attribute_mappings` section of `transpiler.yaml`.
 - **Unmapped_Attribute**: An `Attribute_Node` for which no Known_Mapping, Package_Mapping, or Custom_Mapping exists. Emitted as a structured comment with a `CG` `Warning` diagnostic.
-- **IR_Builder**: The pipeline stage that traverses the Roslyn semantic model and emits IR nodes. Extended by this feature to capture `Attribute_Node` instances.
+- **IR_Builder**: The pipeline stage that consumes `Frontend_Result` and promotes normalized, pre-extracted data into IR nodes. Extended by this feature to promote structured attribute records from the `Normalized_SyntaxTree` into `Attribute_Node` IR nodes. The IR_Builder SHALL NOT call any Roslyn API.
 - **Dart_Generator**: The pipeline stage that emits Dart source from IR nodes. Extended by this feature to emit Dart annotations from `Attribute_Node` instances.
 - **Config_Service**: The pipeline component that parses and exposes `transpiler.yaml`. Extended by this feature to expose the `attribute_mappings` section.
 - **Mapping_Config**: The configuration object passed through the pipeline via `Load_Result.Config`. Extended by this feature with an `attribute_mappings` field.
@@ -44,23 +48,23 @@ This feature spans three pipeline stages: the **IR_Builder** (capture), the **Da
 
 ## Requirements
 
-### Requirement 1: IR Attribute Node
+### Requirement 1: IR Attribute Node Promotion
 
-**User Story:** As a Dart code generator author, I want every C# attribute captured as a typed
-`Attribute_Node` in the IR, so that I can make informed emission decisions without re-consulting
-Roslyn or C# source.
+**User Story:** As a Dart code generator author, I want every C# attribute represented as a typed
+`Attribute_Node` in the IR, so that I can make informed emission decisions using only IR — without
+consulting Roslyn, the `SemanticModel`, or raw C# syntax.
 
 #### Acceptance Criteria
 
 1. THE IR_Builder SHALL introduce an `Attribute_Node` IR node type in the Declarations category, carrying: `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of the `Attribute_Target` enum values), and `SourceLocation`.
 2. THE IR_Builder SHALL attach a list of `Attribute_Node` instances to every IR node type that can carry C# attributes: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Event`, `Delegate`, `Parameter`.
-3. WHEN a C# declaration carries one or more attributes, THE IR_Builder SHALL emit one `Attribute_Node` per attribute in source-declaration order.
-4. THE IR_Builder SHALL resolve the `FullyQualifiedName` of each attribute using the Roslyn `SemanticModel` (e.g., `[JsonProperty]` → `Newtonsoft.Json.JsonPropertyAttribute`).
-5. THE IR_Builder SHALL capture assembly-level and module-level attributes as `Attribute_Node` instances attached to the `CompilationUnit` IR node, with `Target` set to `Assembly` or `Module` respectively.
-6. THE IR_Builder SHALL capture return-value attributes (declared via `[return: ...]` syntax) as `Attribute_Node` instances attached to the enclosing `Method` IR node with `Target = ReturnValue`.
-7. WHEN the Roslyn `SemanticModel` cannot resolve an attribute's fully-qualified name, THE IR_Builder SHALL set `FullyQualifiedName` to the unresolved short name, set `Target` to the syntactic target, emit an `IR` `Warning` diagnostic identifying the unresolved attribute, and SHALL NOT drop the `Attribute_Node`.
-8. THE IR_Builder SHALL capture every attribute argument — positional and named — as IR expression nodes using the same expression-lowering rules applied to all other IR expressions.
-9. IF a C# attribute uses a complex argument expression that cannot be lowered to an IR expression node, THE IR_Builder SHALL substitute an `UnsupportedNode` placeholder for that argument and emit an `IR` `Warning` diagnostic; the `Attribute_Node` itself SHALL still be emitted.
+3. WHEN a declaration node in the `Normalized_SyntaxTree` carries one or more structured attribute records (placed there by the Roslyn_Frontend per RF Requirement 10), THE IR_Builder SHALL emit one `Attribute_Node` per record in the order the Roslyn_Frontend attached them; it SHALL NOT re-query Roslyn or re-parse attribute syntax.
+4. THE IR_Builder SHALL populate `Attribute_Node.FullyQualifiedName` and all argument fields directly from the structured attribute record provided by the Roslyn_Frontend; it SHALL NOT call any Roslyn `SemanticModel` API to resolve attribute names or argument values.
+5. THE IR_Builder SHALL promote assembly-level and module-level attribute records (attached to the compilation-unit node by the Roslyn_Frontend) as `Attribute_Node` instances on the `CompilationUnit` IR node, with `Target` set to `Assembly` or `Module` respectively.
+6. THE IR_Builder SHALL promote return-value attribute records (attached to method nodes by the Roslyn_Frontend with a `ReturnValue` target marker) as `Attribute_Node` instances on the enclosing `Method` IR node with `Target = ReturnValue`.
+7. WHEN a structured attribute record has `Kind = Unresolved` (set by the Roslyn_Frontend when it could not resolve the attribute's fully-qualified name per RF Requirement 10.4), THE IR_Builder SHALL set `Attribute_Node.FullyQualifiedName` to the unresolved short name, set `Target` to the syntactic target from the record, emit an `IR` `Warning` diagnostic identifying the unresolved attribute, and SHALL NOT drop the `Attribute_Node`.
+8. THE IR_Builder SHALL promote every attribute argument — positional and named — from the structured attribute record into IR expression nodes using the same expression-promotion rules applied to all other IR expressions.
+9. WHEN a structured attribute record contains an `UnsupportedNode` marker for an argument (placed by the Roslyn_Frontend when it could not lower the argument to a plain-data value per RF Requirement 10.2), THE IR_Builder SHALL substitute an `UnsupportedNode` placeholder for that argument and emit an `IR` `Warning` diagnostic; the `Attribute_Node` itself SHALL still be emitted.
 
 ---
 
@@ -242,7 +246,7 @@ a wide range of C# attribute inputs.
 
 #### Acceptance Criteria
 
-1. FOR ALL valid C# compilations, the count of `Attribute_Node` instances in the IR SHALL equal the count of C# attribute applications in the source (attribute count preservation property).
+1. FOR ALL valid `Frontend_Result` inputs, the count of `Attribute_Node` instances in the IR SHALL equal the count of structured attribute records attached to declaration nodes in the `Normalized_SyntaxTree` by the Roslyn_Frontend (attribute count preservation property).
 2. FOR ALL valid IR trees containing `Attribute_Node` instances, parsing the Pretty_Printer output SHALL produce an IR tree where every `Attribute_Node` is structurally and value-equal to the original (round-trip property).
 3. FOR ALL `Attribute_Node` instances, THE `Attribute_Mapper` SHALL produce exactly one of: a Dart annotation string, or an unmapped comment string — never both and never neither (total mapping property).
 4. FOR ALL `Attribute_Node` instances with a Known_Mapping, the generated Dart annotation SHALL be syntactically valid Dart (syntactic validity property).

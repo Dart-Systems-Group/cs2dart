@@ -32,6 +32,13 @@ without any further knowledge of C# syntax or Roslyn APIs.
 - **Project_Entry**: A record within `Load_Result` representing one loaded project. Carries `ProjectPath`, `ProjectName`, `TargetFramework`, `OutputKind`, `LangVersion`, `NullableEnabled`, `Compilation`, `PackageReferences`, and `Diagnostics`. Full schema is defined in the Project_Loader specification.
 - **IR_Build_Result**: The output of the IR_Builder. Contains `Units` (list of `IrCompilationUnit`, one per `Project_Entry`), `Diagnostics` (aggregated `IR`-prefixed diagnostics), and `Success` (true when no `Error`-severity diagnostics are present).
 - **Mapping_Config**: The configuration object parsed from `transpiler.yaml` by the `Project_Loader` and passed into the pipeline via `Load_Result.Config`. The `linq_strategy` field (one of `lower_to_loops` or `preserve_functional`) controls how the IR_Builder handles LINQ expressions. The full schema is defined in the Project_Loader specification.
+- **Frontend_Result**: The output of the Roslyn_Frontend consumed by the IR_Builder. Contains `Units` (list of `Frontend_Unit`, one per `Project_Entry`), `Diagnostics`, and `Success`. Full schema defined in the Roslyn Frontend specification.
+- **Frontend_Unit**: The normalized, fully-annotated representation of one C# project. Contains `ProjectName`, `OutputKind`, `TargetFramework`, `LangVersion`, `NullableEnabled`, `PackageReferences`, and `NormalizedTrees`. Full schema defined in the Roslyn Frontend specification.
+- **Normalized_SyntaxTree**: A rewritten syntax tree paired with a `SymbolTable` that pre-resolves all named symbols. The IR_Builder reads from this structure rather than calling Roslyn APIs directly.
+- **SymbolTable**: A dictionary mapping every `SyntaxNode` carrying a named reference to its `ResolvedSymbol` record, populated by the Roslyn_Frontend before handoff.
+- **ResolvedSymbol**: A plain-data record (no Roslyn types) containing `FullyQualifiedName`, `AssemblyName`, `Kind`, `SourcePackageId` (nullable), `SourceLocation` (nullable), and `ConstantValue` (nullable). Full schema defined in the Roslyn Frontend specification.
+- **Attribute_Node**: A Declaration IR node representing a single C# attribute application. Carries `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of the `Attribute_Target` enum values), and `SourceLocation`. Defined fully in Requirement 1.3.
+- **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
 
 ---
 
@@ -46,7 +53,9 @@ so that I can write a complete, switch-exhaustive visitor without handling raw C
 
 1. THE IR_Builder SHALL represent every C# construct supported by the transpiler as exactly one IR_Node subtype.
 2. THE IR SHALL organize nodes into four top-level categories: **Declarations**, **Statements**, **Expressions**, and **Types**.
-3. THE IR SHALL include the following Declaration node types: `CompilationUnit`, `Namespace`, `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Destructor`, `Property`, `Field`, `Event`, `Delegate`, `TypeParameter`, `Parameter`, `LocalFunction`.
+3. THE IR SHALL include the following Declaration node types: `CompilationUnit`, `Namespace`, `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Destructor`, `Property`, `Field`, `Event`, `Delegate`, `TypeParameter`, `Parameter`, `LocalFunction`, `Attribute_Node`.
+   - `Attribute_Node` carries: `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of `Class`, `Struct`, `Interface`, `Enum`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`), and `SourceLocation`.
+   - `Attribute_Node` instances are attached as a list on every Declaration node type that can carry C# attributes: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Event`, `Delegate`, `Parameter`; and on `CompilationUnit` for assembly-level and module-level attributes.
 4. THE IR SHALL include the following Statement node types: `Block`, `ExpressionStatement`, `ReturnStatement`, `IfStatement`, `WhileStatement`, `ForStatement`, `ForEachStatement`, `SwitchStatement`, `SwitchCase`, `BreakStatement`, `ContinueStatement`, `ThrowStatement`, `TryCatchStatement`, `CatchClause`, `FinallyClause`, `LocalDeclaration`, `YieldReturnStatement`, `YieldBreakStatement`.
 5. THE IR SHALL include the following Expression node types: `Literal`, `Identifier`, `BinaryExpression`, `UnaryExpression`, `AssignmentExpression`, `ConditionalExpression`, `InvocationExpression`, `MemberAccessExpression`, `ElementAccessExpression`, `ObjectCreationExpression`, `ArrayCreationExpression`, `CastExpression`, `IsExpression`, `AsExpression`, `LambdaExpression`, `AnonymousObjectCreation`, `TupleExpression`, `SwitchExpression`, `ThrowExpression`, `AwaitExpression`, `InterpolatedString`, `NullCoalescingExpression`, `NullConditionalExpression`.
 6. THE IR SHALL include the following Type node types: `PrimitiveType`, `NamedType`, `GenericType`, `ArrayType`, `NullableType`, `TupleType`, `FunctionType`, `VoidType`, `DynamicType`.
@@ -62,13 +71,13 @@ without re-parsing C# source.
 
 #### Acceptance Criteria
 
-1. THE IR_Builder SHALL attach an IR_Symbol to every `Identifier`, `MemberAccessExpression`, `InvocationExpression`, `ObjectCreationExpression`, and type reference node.
-2. THE IR_Symbol SHALL contain: a fully-qualified name, the declaring assembly name, the kind (type, method, field, property, event, local, parameter), a nullable source location, and a nullable `SourcePackageId` string.
+1. THE IR_Builder SHALL attach an IR_Symbol to every `Identifier`, `MemberAccessExpression`, `InvocationExpression`, `ObjectCreationExpression`, and type reference node by reading the corresponding `ResolvedSymbol` entry from the `SymbolTable` in the `Normalized_SyntaxTree`.
+2. THE IR_Symbol SHALL contain: a fully-qualified name, the declaring assembly name, the kind (type, method, field, property, event, local, parameter), a nullable source location, and a nullable `SourcePackageId` string — all sourced directly from the `ResolvedSymbol` record.
 3. WHEN a symbol refers to a type defined within the compilation unit, THE IR_Symbol SHALL include a reference to the corresponding Declaration IR_Node.
-4. WHEN a symbol refers to a type from an external assembly, THE IR_Symbol SHALL record the assembly name and fully-qualified CLR type name.
-4a. WHEN a symbol refers to a type whose assembly name matches a package in `Load_Result.PackageReferences`, THE IR_Builder SHALL set `IR_Symbol.SourcePackageId` to that package's ID so that the Dart code generator can resolve the correct import path without re-consulting the Mapping_Registry.
-5. IF the Roslyn_Model cannot resolve a symbol, THEN THE IR_Builder SHALL emit an `UnresolvedSymbol` node with the original identifier text and source span, and SHALL continue processing remaining nodes.
-6. THE IR_Builder SHALL resolve all overloaded method references to the specific overload selected by Roslyn, so that the IR contains no ambiguous method references.
+4. WHEN a symbol refers to a type from an external assembly, THE IR_Symbol SHALL record the assembly name and fully-qualified CLR type name from the `ResolvedSymbol` record.
+4a. WHEN a `ResolvedSymbol.SourcePackageId` is non-null, THE IR_Builder SHALL copy it to `IR_Symbol.SourcePackageId` so that the Dart code generator can resolve the correct import path without re-consulting the Mapping_Registry.
+5. WHEN the `SymbolTable` entry for a node has `Kind = Unresolved` (set by the Roslyn_Frontend when binding failed), THE IR_Builder SHALL emit an `UnresolvedSymbol` node with the original identifier text and source span, and SHALL continue processing remaining nodes.
+6. THE IR_Builder SHALL use the specific overload recorded in the `SymbolTable` for every method reference, so that the IR contains no ambiguous method references.
 
 ---
 
@@ -194,22 +203,22 @@ fully represented in the IR, so that I can emit correct Dart generic bounds.
 
 ---
 
-### Requirement 10: Load_Result Integration Contract
+### Requirement 10: Frontend_Result Integration Contract
 
 **User Story:** As a pipeline integrator, I want a well-defined input and output contract for the IR_Builder,
-so that the Project_Loader and the IR stage can evolve independently.
+so that the Roslyn_Frontend and the IR stage can evolve independently, and the IR_Builder has no dependency on Roslyn.
 
 #### Acceptance Criteria
 
-1. THE IR_Builder SHALL accept a `Load_Result` as its sole input and SHALL read `Load_Result.Config` to obtain the `Mapping_Config` for the run; it SHALL NOT accept a raw `Compilation` or `Mapping_Config` as separate top-level arguments.
-2. THE IR_Builder SHALL iterate `Load_Result.Projects` in the order provided (topological, leaf-first) and produce one `IrCompilationUnit` per `Project_Entry`, collecting them into `IR_Build_Result.Units` in the same order.
-3. FOR EACH `Project_Entry`, THE IR_Builder SHALL read `Project_Entry.OutputKind`, `Project_Entry.TargetFramework`, `Project_Entry.LangVersion`, and `Project_Entry.NullableEnabled` and record them as metadata on the corresponding `IrCompilationUnit` so that the Dart code generator does not need to re-inspect the Roslyn `Compilation`.
-4. THE IR_Builder SHALL read `Project_Entry.PackageReferences` and attach the list to the `IrCompilationUnit` so that the NuGet dependency handler can map packages to Dart equivalents without accessing the `Compilation` directly. Each entry in the attached list SHALL include the `Tier` and `DartMapping` fields populated by the NuGet_Handler prior to IR_Builder invocation (per NuGet Requirement 13.4).
-5. THE IR_Builder SHALL not invoke Roslyn APIs that trigger re-parsing or re-binding; it SHALL read only from the already-computed `SemanticModel` within each `Project_Entry.Compilation`.
-6. THE IR_Builder SHALL process each `SyntaxTree` within a `Project_Entry.Compilation` in deterministic order (alphabetical by file path) to ensure Determinism.
-7. WHEN the Roslyn `SemanticModel` reports binding errors for a node, THE IR_Builder SHALL emit an `UnresolvedSymbol` or `UnsupportedNode` placeholder and SHALL continue processing remaining nodes rather than aborting.
-8. THE IR_Builder SHALL expose a single public entry point: `IR_Build_Result Build(Load_Result loadResult)` (or language-equivalent), with no mutable global state.
-9. THE IR_Builder SHALL complete processing of a single `SyntaxTree` without retaining references to Roslyn objects after that tree's IR subtree is emitted, to allow incremental memory release.
+1. THE IR_Builder SHALL accept a `Frontend_Result` as its sole input and SHALL NOT call any Roslyn API; all symbol resolution, type information, and attribute data SHALL be read from the `SymbolTable`, `ResolvedSymbol` records, and structured attribute data in the `Frontend_Result`.
+2. THE IR_Builder SHALL iterate `Frontend_Result.Units` in the order provided (topological, leaf-first) and produce one `IrCompilationUnit` per `Frontend_Unit`, collecting them into `IR_Build_Result.Units` in the same order.
+3. FOR EACH `Frontend_Unit`, THE IR_Builder SHALL read `Frontend_Unit.OutputKind`, `Frontend_Unit.TargetFramework`, `Frontend_Unit.LangVersion`, and `Frontend_Unit.NullableEnabled` and record them as metadata on the corresponding `IrCompilationUnit` so that the Dart code generator does not need to re-inspect the Roslyn `Compilation`.
+4. THE IR_Builder SHALL read `Frontend_Unit.PackageReferences` and attach the list to the `IrCompilationUnit` so that the NuGet dependency handler can map packages to Dart equivalents without accessing the `Compilation` directly. Each entry in the attached list SHALL include the `Tier` and `DartMapping` fields populated by the NuGet_Handler prior to IR_Builder invocation (per NuGet Requirement 13.4).
+5. THE IR_Builder SHALL NOT invoke any Roslyn API (`SemanticModel`, `SyntaxTree`, `ISymbol`, `CSharpCompilation`, or any type from `Microsoft.CodeAnalysis.*`); all data SHALL be read from the plain-data records in `Frontend_Result`.
+6. THE IR_Builder SHALL process each `Normalized_SyntaxTree` within a `Frontend_Unit` in the order provided; the Roslyn_Frontend guarantees deterministic ordering (alphabetical by file path).
+7. WHEN a `Normalized_SyntaxTree` node carries an `Unsupported` or `UnknownAttribute` marker from the Roslyn_Frontend, THE IR_Builder SHALL emit the corresponding `UnsupportedNode` or `UnresolvedSymbol` placeholder and continue processing remaining nodes rather than aborting.
+8. THE IR_Builder SHALL expose a single public entry point: `IR_Build_Result Build(Frontend_Result frontendResult)` (or language-equivalent), with no mutable global state.
+9. THE IR_Builder SHALL complete processing of a single `Normalized_SyntaxTree` without retaining references to its nodes after that tree's IR subtree is emitted, to allow incremental memory release.
 
 ---
 
@@ -282,6 +291,7 @@ errors early.
 7. WHEN THE IR_Validator detects a violation, THE IR_Validator SHALL collect all violations and return them as a list of structured diagnostics rather than throwing on the first error.
 8. THE IR_Validator SHALL complete validation of any IR tree in time proportional to the number of IR nodes in the tree.
 9. THE IR_Validator SHALL verify that every `IR_Symbol` whose `AssemblyName` matches a package ID in `IrCompilationUnit.PackageReferences` carries a non-null `SourcePackageId` equal to that package ID (package symbol completeness invariant).
+10. THE IR_Validator SHALL verify that every `Attribute_Node` attached to an IR node has a non-null, non-empty `FullyQualifiedName` and a `Target` value that is consistent with the type of the IR node it is attached to (e.g., `Target = Assembly` or `Target = Module` only on `CompilationUnit`; `Target = Parameter` only on `Parameter` nodes; `Target = ReturnValue` only on `Method` nodes).
 
 ---
 

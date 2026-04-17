@@ -30,7 +30,7 @@ structured data and promotes it into IR nodes without consulting Roslyn.
 
 - **Attribute**: A C# metadata decorator applied to a declaration or parameter using `[AttributeName(...)]` syntax. Carries a name, zero or more positional constructor arguments, and zero or more named property-setter arguments.
 - **Annotation**: A Dart metadata decorator applied to a declaration using `@annotationName(...)` syntax. Semantically equivalent to a C# attribute in the contexts this feature addresses.
-- **Attribute_Node**: The new IR node type introduced by this feature. Carries the attribute's fully-qualified name, positional arguments (as ordered IR expression nodes), named arguments (as a map of string → IR expression node), the target kind, and the source location.
+- **Attribute_Node**: The new IR node type introduced by this feature. Carries the attribute's fully-qualified name, positional arguments (as ordered IR expression nodes), named arguments (as an ordered list of `{ Name: string, Value: IR expression node }` pairs), the target kind, and the source location.
 - **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
 - **Attribute_Mapping**: A rule that maps a fully-qualified C# attribute name to a Dart annotation expression. Stored in `Mapping_Config.attribute_mappings`.
 - **Attribute_Mapper**: The sub-component of the Dart_Generator responsible for resolving `Attribute_Node` instances to Dart annotation strings using the three-tier lookup.
@@ -165,7 +165,7 @@ annotations without modifying the transpiler source.
 #### Acceptance Criteria
 
 1. THE Config_Service SHALL recognize a top-level `attribute_mappings` section in `transpiler.yaml` containing a map of fully-qualified C# attribute names to Dart annotation template strings.
-2. THE Config_Service SHALL expose the parsed custom mappings via `IConfigService.attributeMappings` returning `Map<String, AttributeMappingRule>`, where `AttributeMappingRule` carries: `dartTemplate` (string), optional `requiredImports` (list of Dart import URIs), and optional `requiredPackages` (list of pub package names with version constraints).
+2. THE Config_Service SHALL expose the parsed custom mappings via `IConfigService.attributeMappings` returning `Map<String, AttributeMappingRule>`, where `AttributeMappingRule` carries: `dartTemplate` (string), optional `requiredImports` (list of Dart import URIs), optional `requiredPackages` (list of pub package names with version constraints), and optional `targetFilter` (list of `Attribute_Target` values; when present, the mapping is only applied when the `Attribute_Node.Target` is in this list — see Requirement 8.4).
 3. WHEN `attribute_mappings` is absent from `transpiler.yaml`, `IConfigService.attributeMappings` SHALL return an empty map.
 4. IF an `attribute_mappings` entry has a value that is not a string or a valid `AttributeMappingRule` object, THE Config_Service SHALL emit a `CFG` `Error` diagnostic identifying the offending key and halt pipeline initialization.
 5. THE `Attribute_Mapper` SHALL apply Custom_Mappings with higher priority than both Package_Mappings and Known_Mappings, allowing users to override built-in behavior.
@@ -221,7 +221,7 @@ is needed for well-known packages.
 1. WHEN the NuGet_Handler resolves a package to a Dart equivalent and that package has a known attribute mapping table, THE NuGet_Handler SHALL populate the `attribute_mappings` sub-map of the corresponding `Mapping_Config.package_mappings` entry before the IR_Builder runs.
 2. THE NuGet_Handler SHALL include built-in attribute mapping tables for the following packages: `Newtonsoft.Json`, `System.Text.Json` (BCL), `System.ComponentModel.DataAnnotations` (BCL), `Microsoft.EntityFrameworkCore` (partial), `xunit`, `NUnit`, `MSTest`.
 3. WHEN a NuGet package has no built-in attribute mapping table and no user-supplied `attribute_mappings` sub-map, THE NuGet_Handler SHALL NOT emit any diagnostic for the missing attribute mappings; the `Attribute_Mapper` will handle unmapped attributes at generation time.
-4. THE NuGet_Handler SHALL record in `Gen_Result.Diagnostics` at `Info` severity which packages contributed attribute mapping tables to `Mapping_Config`, so that the mapping report is complete.
+4. THE NuGet_Handler SHALL emit a diagnostic at `Info` severity for each package that contributed attribute mapping tables to `Mapping_Config`, so that the mapping report is complete. These diagnostics SHALL be collected in the NuGet_Handler's own diagnostic output (included in `Load_Result.Diagnostics` via the standard diagnostic aggregation path) and SHALL NOT be written to `Gen_Result.Diagnostics`, which is owned by the Dart_Generator.
 
 ---
 

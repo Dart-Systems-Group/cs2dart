@@ -142,6 +142,21 @@ This document specifies the requirements for the **Configuration Service** of th
 
 ---
 
+### Requirement 8: Experimental Feature Flags
+
+**User Story:** As a transpiler developer, I want to expose in-progress features behind named boolean flags in `transpiler.yaml`, so that users can opt in to experimental behavior without requiring a new release, and so that the flags are discoverable and validated like all other configuration.
+
+#### Acceptance Criteria
+
+1. THE Config_Service SHALL recognize an `experimental` top-level section in `transpiler.yaml` containing a map of feature-flag names (strings) to boolean values.
+2. THE Config_Service SHALL expose the parsed flags via `IConfigService.experimentalFeatures` returning `Map<String, bool>`; WHEN the `experimental` section is absent, the accessor SHALL return an empty map.
+3. WHEN an `experimental` entry has a value that is not a boolean, THE Config_Service SHALL emit a Config_Diagnostic of severity `Error` identifying the offending key and halt pipeline initialization.
+4. THE Config_Service SHALL NOT emit a Config_Diagnostic for unrecognized feature-flag names within the `experimental` section; unknown flags SHALL be silently ignored to allow forward-compatible config files.
+5. FOR ALL valid `transpiler.yaml` files, parsing then serializing the `experimental` section then parsing again SHALL produce a value-equal `experimentalFeatures` map (round-trip property).
+6. WHEN a pipeline module queries `IConfigService.experimentalFeatures` for a flag name that is not present in the map, the module SHALL treat the flag as `false` (disabled by default).
+
+---
+
 ### Requirement 9: Load_Result Config Field
 
 **User Story:** As a pipeline integrator, I want the `Load_Result` to carry the active Config_Object, so that downstream stages and diagnostic reporters can inspect which configuration was in effect for a given run without re-reading the file.

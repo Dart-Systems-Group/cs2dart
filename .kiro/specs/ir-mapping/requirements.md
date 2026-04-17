@@ -111,7 +111,7 @@ the same semantic construct.
 1. THE IR_Builder SHALL lower auto-properties (e.g., `public int X { get; set; }`) to a `Property` node with explicit getter and setter `Method` nodes and a backing `Field` node.
 2. THE IR_Builder SHALL lower primary constructors (C# 12) to an explicit `Constructor` node with corresponding `Parameter` and `Field` nodes.
 3. THE IR_Builder SHALL lower record types to a `Class` node (or `Struct` node for record structs) with synthesized equality members, `ToString`, and `Deconstruct` methods represented as explicit IR `Method` nodes.
-4. THE IR_Builder SHALL lower C# `partial` classes by merging all partial declarations into a single `Class` IR_Node before emitting.
+4. THE IR_Builder SHALL lower C# `partial` classes by merging all partial declarations into a single `Class` IR_Node before emitting. During this merge, THE IR_Builder SHALL union the `Attribute_Node` lists from every partial part onto the merged `Class` IR_Node and onto each merged member IR_Node, ordered by source file path (alphabetical ascending) then by line number (ascending) within a file, preserving every attribute application without deduplication (see Attribute → Annotation Mapping Requirement 12).
 5. THE IR_Builder SHALL lower static constructors to a `Constructor` node with `IsStatic = true`.
 6. THE IR_Builder SHALL lower indexers to a `Method` node with name `get_Item` or `set_Item` and an `IsIndexer = true` flag.
 7. THE IR_Builder SHALL lower explicit interface implementations to `Method` nodes with an `ExplicitInterface` field referencing the implemented interface IR_Symbol.
@@ -326,3 +326,4 @@ C# inputs.
 5. FOR ALL C# method bodies, the count of `ReturnStatement` IR nodes in the lowered IR SHALL be greater than or equal to the count of `return` statements in the original source (lowering may introduce additional returns, but SHALL NOT remove any).
 6. FOR ALL C# expressions, the IR_Type attached to the IR expression node SHALL be equal to the type reported by the Roslyn `SemanticModel` for the corresponding syntax node (type fidelity property).
 7. FOR ALL C# `const` declarations, the literal value in the IR `Field` node SHALL equal the compile-time constant value reported by Roslyn (constant fidelity property).
+8. FOR ALL `Frontend_Unit` inputs containing a `partial` class whose parts collectively carry `N` total `Attribute_Node` instances across all parts (on the class itself or on any member), the merged `Class` IR_Node and its member IR_Nodes SHALL together carry exactly `N` `Attribute_Node` instances — no attribute application from any partial part SHALL be dropped (partial merge attribute count preservation property).

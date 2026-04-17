@@ -31,7 +31,7 @@ structured data and promotes it into IR nodes without consulting Roslyn.
 - **Attribute**: A C# metadata decorator applied to a declaration or parameter using `[AttributeName(...)]` syntax. Carries a name, zero or more positional constructor arguments, and zero or more named property-setter arguments.
 - **Annotation**: A Dart metadata decorator applied to a declaration using `@annotationName(...)` syntax. Semantically equivalent to a C# attribute in the contexts this feature addresses.
 - **Attribute_Node**: The new IR node type introduced by this feature. Carries the attribute's fully-qualified name, positional arguments (as ordered IR expression nodes), named arguments (as a map of string → IR expression node), the target kind, and the source location.
-- **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
+- **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
 - **Attribute_Mapping**: A rule that maps a fully-qualified C# attribute name to a Dart annotation expression. Stored in `Mapping_Config.attribute_mappings`.
 - **Attribute_Mapper**: The sub-component of the Dart_Generator responsible for resolving `Attribute_Node` instances to Dart annotation strings using the three-tier lookup.
 - **Known_Mapping**: A built-in, hardcoded mapping from a well-known C# attribute to its Dart equivalent (e.g., `System.ObsoleteAttribute` → `@Deprecated(...)`).
@@ -80,7 +80,8 @@ stable.
 2. THE Pretty_Printer SHALL serialize every `Attribute_Node` field — including all positional and named arguments — in its canonical output.
 3. FOR ALL valid IR trees containing `Attribute_Node` instances, parsing the Pretty_Printer output SHALL produce an IR tree where every `Attribute_Node` is structurally and value-equal to the original (round-trip property).
 4. THE IR_Validator SHALL verify that every `Attribute_Node` attached to an IR node has a non-null `FullyQualifiedName` and a valid `Target` value consistent with the type of the IR node it is attached to.
-5. FOR ALL valid C# compilations, running THE IR_Builder twice SHALL produce IR trees with identical `Attribute_Node` lists (determinism property).
+5. THE IR_Validator SHALL be extended to include `Attribute_Node` in its well-formedness checks; specifically, it SHALL verify that: (a) every `Attribute_Node` attached to an IR node belongs to the set of node types listed in Requirement 1.2, (b) `FullyQualifiedName` is non-null and non-empty, (c) `Target` is a valid `Attribute_Target` enum value consistent with the type of the IR node it is attached to, and (d) every positional and named argument is a valid IR expression node. A well-formed IR tree containing `Attribute_Node` instances SHALL produce zero `IR_Validator` violations.
+6. FOR ALL valid C# compilations, running THE IR_Builder twice SHALL produce IR trees with identical `Attribute_Node` lists (determinism property).
 
 ---
 
@@ -100,10 +101,11 @@ appears in more than one tier, so there are no silent surprises.
 4. THE `Attribute_Mapper` SHALL NOT silently drop any `Attribute_Node`; every node MUST result in either a Dart annotation or an unmapped comment.
 5. WHEN an `Attribute_Node` has `Target = Assembly` or `Target = Module`, THE `Attribute_Mapper` SHALL emit the annotation or unmapped comment at the top of the generated barrel file (`lib/<package_name>.dart`), before any `export` directives.
 6. WHEN an `Attribute_Node` has `Target = ReturnValue`, THE `Attribute_Mapper` SHALL emit the annotation or unmapped comment on the line immediately preceding the method's return type in the generated Dart method signature, using a `// RETURN VALUE ATTRIBUTE:` prefix for unmapped cases.
-7. THE `Attribute_Mapper` SHALL process multiple attributes on the same declaration in the same order as the `Attribute_Node` list on the IR node (source-declaration order).
-8. WHEN a Custom_Mapping entry matches an `Attribute_Node` whose `FullyQualifiedName` also appears in a Package_Mapping or Known_Mapping, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Custom_Mapping overrides the lower-tier mapping, identifying the winning tier, the shadowed tier, and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
-9. WHEN a Package_Mapping entry (populated by the NuGet_Handler) matches an `Attribute_Node` whose `FullyQualifiedName` also appears in the Known_Mapping table, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Package_Mapping overrides the Known_Mapping, identifying both tiers and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
-10. WHEN the same `FullyQualifiedName` appears in more than one tier (Custom, Package, or Known), THE `Attribute_Mapper` SHALL emit exactly one cross-tier collision diagnostic per unique `FullyQualifiedName` per pipeline run, regardless of how many `Attribute_Node` instances carry that name (no duplicate collision diagnostics).
+7. WHEN an `Attribute_Node` has `Target = EnumMember`, THE `Attribute_Mapper` SHALL emit the annotation or unmapped comment on the line immediately preceding the enum value declaration in the generated Dart enum body (e.g., `@JsonValue(1)` before `active,`).
+8. THE `Attribute_Mapper` SHALL process multiple attributes on the same declaration in the same order as the `Attribute_Node` list on the IR node (source-declaration order).
+9. WHEN a Custom_Mapping entry matches an `Attribute_Node` whose `FullyQualifiedName` also appears in a Package_Mapping or Known_Mapping, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Custom_Mapping overrides the lower-tier mapping, identifying the winning tier, the shadowed tier, and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
+10. WHEN a Package_Mapping entry (populated by the NuGet_Handler) matches an `Attribute_Node` whose `FullyQualifiedName` also appears in the Known_Mapping table, THE `Attribute_Mapper` SHALL emit a `CG` `Info` diagnostic stating that the Package_Mapping overrides the Known_Mapping, identifying both tiers and the `FullyQualifiedName`. This diagnostic is informational only and SHALL NOT prevent emission.
+11. WHEN the same `FullyQualifiedName` appears in more than one tier (Custom, Package, or Known), THE `Attribute_Mapper` SHALL emit exactly one cross-tier collision diagnostic per unique `FullyQualifiedName` per pipeline run, regardless of how many `Attribute_Node` instances carry that name (no duplicate collision diagnostics).
 
 ---
 
@@ -202,8 +204,9 @@ handled gracefully, so that the generated code does not contain syntactically in
 
 1. WHEN an `Attribute_Node` has `Target = Assembly` or `Target = Module` and no mapping exists, THE `Attribute_Mapper` SHALL emit the unmapped comment at the top of the barrel file and SHALL NOT attempt to emit it on any individual declaration.
 2. WHEN an `Attribute_Node` has `Target = ReturnValue` and the mapped Dart annotation is not valid on a Dart method return type, THE `Attribute_Mapper` SHALL emit the annotation as a comment with a `CG` `Warning` diagnostic noting the invalid target.
-3. WHEN a Custom_Mapping or Package_Mapping specifies a `targetFilter` list of allowed `Attribute_Target` values, THE `Attribute_Mapper` SHALL only emit the annotation when the `Attribute_Node.Target` is in that list; for non-matching targets it SHALL emit the unmapped comment and a `CG` `Warning` diagnostic.
-4. THE `Attribute_Mapper` SHALL never emit a Dart annotation in a syntactic position that would cause a `dart analyze` error; IF the only valid emission is a comment, it SHALL emit a comment.
+3. WHEN an `Attribute_Node` has `Target = EnumMember` and no mapping exists, THE `Attribute_Mapper` SHALL emit the unmapped comment immediately before the enum value declaration and SHALL NOT attempt to emit it on the enclosing enum type or any other declaration.
+4. WHEN a Custom_Mapping or Package_Mapping specifies a `targetFilter` list of allowed `Attribute_Target` values, THE `Attribute_Mapper` SHALL only emit the annotation when the `Attribute_Node.Target` is in that list; for non-matching targets it SHALL emit the unmapped comment and a `CG` `Warning` diagnostic.
+5. THE `Attribute_Mapper` SHALL never emit a Dart annotation in a syntactic position that would cause a `dart analyze` error; IF the only valid emission is a comment, it SHALL emit a comment.
 
 ---
 
@@ -260,3 +263,22 @@ a wide range of C# attribute inputs.
 7. FOR ALL valid `transpiler.yaml` files containing an `attribute_mappings` section, parsing then serializing then parsing SHALL produce a value-equal `attributeMappings` map (config round-trip property).
 8. FOR ALL `FullyQualifiedName` values that appear in more than one tier, exactly one cross-tier collision `CG` `Info` diagnostic SHALL be present in `Gen_Result.Diagnostics` per pipeline run, regardless of how many `Attribute_Node` instances carry that name (cross-tier collision deduplication property).
 9. FOR ALL `FullyQualifiedName` values that appear in exactly one tier, no cross-tier collision diagnostic SHALL be present in `Gen_Result.Diagnostics` (no spurious collision diagnostic property).
+10. FOR ALL `Attribute_Node` instances with `Target = EnumMember`, the `Attribute_Mapper` SHALL emit the annotation or unmapped comment immediately before the corresponding enum value declaration, and SHALL NOT emit it on the enclosing enum type or any other declaration (enum member placement property).
+11. FOR ALL `Frontend_Unit` inputs containing a `partial` class whose parts collectively carry `N` total `Attribute_Node` instances across all parts (on the class itself or on any member), the merged `Class` IR_Node and its member IR_Nodes SHALL together carry exactly `N` `Attribute_Node` instances — no attribute application from any partial part SHALL be dropped (partial merge attribute count preservation property).
+
+---
+
+### Requirement 12: Attribute Node Merging During Partial Class Consolidation
+
+**User Story:** As a Dart code generator author, I want `Attribute_Node` lists from all parts of a
+`partial` class merged onto the single consolidated IR node, so that no attribute application is
+silently dropped when a class is split across multiple files.
+
+#### Acceptance Criteria
+
+1. WHEN the IR_Builder merges multiple `partial` class declarations into a single `Class` IR_Node (per IR Requirement 4.4), THE IR_Builder SHALL collect the `Attribute_Node` lists from every partial part and union them onto the merged `Class` IR_Node, preserving every attribute application from every part without deduplication.
+2. WHEN a member (method, property, field, constructor, or event) appears across multiple partial files and carries attributes in more than one part, THE IR_Builder SHALL union the `Attribute_Node` lists from all parts onto the single merged member IR_Node, preserving every attribute application from every part without deduplication.
+3. THE IR_Builder SHALL order the merged `Attribute_Node` list by source-declaration order: `Attribute_Node` instances from the partial part whose source file path sorts earliest alphabetically appear first; within a single file, `Attribute_Node` instances appear in ascending line-number order. This ordering SHALL be deterministic across pipeline runs.
+4. WHEN a class has only a single (non-partial) declaration, THE IR_Builder SHALL attach its `Attribute_Node` list to the `Class` IR_Node exactly as specified by Requirement 1.2 and 1.3, with no change in behavior.
+5. WHEN a `partial` class has members that each appear in exactly one part (no member is split across parts), THE IR_Builder SHALL attach each member's `Attribute_Node` list to its IR_Node exactly as extracted by the Roslyn_Frontend, with no change in behavior.
+6. THE IR_Builder SHALL NOT deduplicate `Attribute_Node` instances during the partial merge, because C# permits multiple applications of the same attribute type when `AllowMultiple = true`, and the IR must faithfully represent every attribute application as written in source.

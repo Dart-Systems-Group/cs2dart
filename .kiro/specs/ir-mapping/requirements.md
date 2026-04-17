@@ -249,7 +249,7 @@ identical input on every run, so that build caches and golden-file tests remain 
 #### Acceptance Criteria
 
 1. THE IR_Builder SHALL produce identical IR trees for identical `Compilation` inputs regardless of the order in which `SemanticModel` queries are issued internally.
-2. THE IR_Builder SHALL sort all collections within IR nodes (e.g., interface lists, attribute lists) in a canonical order (alphabetical by fully-qualified name) when the source order is not semantically significant.
+2. THE IR_Builder SHALL sort all collections within IR nodes (e.g., interface lists, attribute lists) in a canonical order when the source order is not semantically significant. The canonical order is: primary sort by fully-qualified name (alphabetical, lexicographic); secondary sort by source file path (alphabetical, lexicographic); tertiary sort by line number (ascending). This three-level tie-breaker applies in particular to assembly-level and module-level `Attribute_Node` lists, where the same attribute type (e.g., `[assembly: InternalsVisibleTo(...)]`) may appear in multiple source files and the FQN alone does not produce a unique ordering. See also Attribute → Annotation Mapping Requirement 2.1, which states the same rule for `Attribute_Node` lists specifically.
 3. THE IR_Builder SHALL not use hash-based data structures whose iteration order is non-deterministic (e.g., `Dictionary<K,V>` without sorted enumeration) when building ordered IR collections.
 4. THE IR_Builder SHALL not embed timestamps, process IDs, or other environment-dependent values in IR nodes.
 5. FOR ALL valid C# compilations, running THE IR_Builder twice on the same input SHALL produce IR trees that are structurally and value-equal.

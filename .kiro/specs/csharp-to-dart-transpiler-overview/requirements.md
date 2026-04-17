@@ -82,7 +82,8 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
   - `Packages` — list of `Output_Package` records (one per generated Dart package), each
     carrying the package name, output path, and the complete manifest of files written to disk
   - `Diagnostics` — the complete ordered list of all diagnostics from every pipeline stage
-    (`PL`, `RF`, `IR`, `CG`, `NR`, `VA`, `RC`), ordered by stage then by source file and line number
+    (`PL`, `RF`, `IR`, `CG`, `NR`, `VA`, `RC`, `OR`), ordered by stage then by source file and line number.
+    `OR`-prefixed diagnostics from the Pipeline Orchestrator are appended after all stage diagnostics.
   - `Success` — `true` if and only if `Diagnostics` contains no `Error`-severity entry across
     the entire pipeline run
 - Optional: Dart extension libraries for .NET‑like APIs
@@ -111,6 +112,7 @@ Every component in the transpiler pipeline emits diagnostics using a shared `Dia
 | `VA`   | Validation & analysis    | `VA0001–VA9999` |
 | `CFG`  | Configuration Service    | `CFG0001–CFG9999` |
 | `RC`   | Result Collector         | `RC0001–RC9999` |
+| `OR`   | Pipeline Orchestrator    | `OR0001–OR9999` |
 
 No two components SHALL share a prefix. Roslyn compiler diagnostics are passed through with their original `CS`-prefixed codes and are not renumbered.
 

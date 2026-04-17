@@ -162,20 +162,20 @@ No two components SHALL share a prefix. Roslyn compiler diagnostics are passed t
 
 ## 8. Configuration model
 
+All transpiler configuration is managed by the **Configuration Service** (`IConfigService`), which parses and validates `transpiler.yaml` once at pipeline startup and exposes typed accessors to every pipeline module. No module may read `transpiler.yaml` directly.
+
 ### Transpiler config file (`transpiler.yaml`)
+- Library mappings (`libraryMappings`, `nugetMappings`)
+- Naming conventions (`namingConventions`)
+- Nullability rules (`nullability`)
+- Async behavior (`async`)
+- LINQ lowering strategy (`linqStrategy`)
+- NuGet feed and mapping overrides (`nugetFeedUrls`, `nugetMappings`)
+- Namespace mapping overrides (`namespaceMappings`, `rootNamespace`, `barrelFiles`, `autoResolveConflicts`)
+- Event mapping overrides (`eventStrategy`, `eventMappings`)
+- Struct mapping overrides (`structMappings`)
+- Experimental feature toggles (`experimentalFeatures`)
 
-The `transpiler.yaml` file is parsed by the `Project_Loader` into a `Mapping_Config` object that is threaded through the entire pipeline. All components read their settings from this object rather than from the file directly. Supported top-level keys:
-
-| Key                  | Type              | Default               | Description                                              |
-|----------------------|-------------------|-----------------------|----------------------------------------------------------|
-| `sdk_path`           | string            | auto-detected         | Explicit path to the .NET SDK reference assemblies       |
-| `nuget_feeds`        | list of URLs      | `[nuget.org]`         | NuGet feeds queried in order before falling back to nuget.org |
-| `package_mappings`   | map string→string | `{}`                  | NuGet package name → Dart package name overrides         |
-| `linq_strategy`      | enum              | `preserve_functional` | `lower_to_loops` or `preserve_functional`                |
-| `naming_conventions` | object            | Dart defaults         | Controls identifier casing (PascalCase, camelCase, etc.) |
-| `nullability`        | object            | enabled               | Controls nullable reference type handling                |
-| `async_behavior`     | object            | standard              | Controls async/await mapping strategy                    |
-| `experimental`       | map string→bool   | `{}`                  | Feature-flag toggles for in-progress features            |
 
 ---
 

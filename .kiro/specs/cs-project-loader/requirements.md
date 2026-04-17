@@ -16,8 +16,8 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 - **Diagnostic**: A pipeline-wide structured record emitted by any transpiler component. Every `Diagnostic` contains: `Severity` (one of `Error`, `Warning`, `Info`), `Code` (a string in the format `<prefix><4-digit-number>`, e.g. `PL0001`), `Message` (human-readable string), `Source` (optional file path), and `Location` (optional line and column numbers). Components use reserved code prefixes to avoid collisions: `PL` for Project_Loader, `IR` for IR_Builder, `CG` for code generator.
 - **Dependency_Graph**: A directed acyclic graph of `Project_Entry` nodes representing inter-project dependencies, used to determine topological processing order.
 - **Project_Entry**: A record within `Load_Result` representing one loaded project. Contains: `ProjectPath` (absolute path to the `.csproj` file), `ProjectName` (assembly name), `TargetFramework` (resolved TFM string, e.g. `net8.0`), `OutputKind` (one of `Exe`, `Library`, `WinExe`), `LangVersion` (resolved C# language version string), `NullableEnabled` (boolean), `Compilation` (the Roslyn `CSharpCompilation` for this project), `PackageReferences` (list of `{ PackageName, Version }` records for resolved NuGet packages), and `Diagnostics` (list of `Diagnostic` items scoped to this project).
-- **Load_Result**: The complete output of the `Project_Loader`. Contains: `Projects` (ordered list of `Project_Entry` items in topological dependency order, leaf projects first), `DependencyGraph` (the full `Dependency_Graph`), `Diagnostics` (aggregated list of all `Diagnostic` items from all sub-components), `Success` (boolean, true when no `Diagnostic` of severity `Error` is present), and `Config` (the parsed `Mapping_Config`, or a default instance if no `transpiler.yaml` was found).
-- **Mapping_Config**: An optional user-supplied configuration object parsed from `transpiler.yaml`. It may contain the following top-level keys: `sdk_path` (string, overrides SDK auto-detection), `nuget_feeds` (list of URLs, queried before `nuget.org`), `package_mappings` (map of NuGet package name to Dart package name), `linq_strategy` (one of `lower_to_loops` or `preserve_functional`, controls IR LINQ lowering), `naming_conventions` (object controlling identifier casing rules), `nullability` (object controlling nullable reference type handling), `async_behavior` (object controlling async/await mapping), and `experimental` (map of feature-flag strings to booleans).
+- **Load_Result**: The complete output of the `Project_Loader`. Contains: `Projects` (ordered list of `Project_Entry` items in topological dependency order, leaf projects first), `DependencyGraph` (the full `Dependency_Graph`), `Diagnostics` (aggregated list of all `Diagnostic` items from all sub-components), `Success` (boolean, true when no `Diagnostic` of severity `Error` is present), and `Config` (the active Config_Object from the Config_Service, never null; contains Default_Values when no `transpiler.yaml` was found).
+- **Config_Service**: The `IConfigService` instance provided to the `Project_Loader` at construction time; the sole source of all configuration values. The `Project_Loader` SHALL NOT read `transpiler.yaml` directly.
 
 ---
 
@@ -61,7 +61,7 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 2. WHEN a package is successfully resolved, THE `Project_Loader` SHALL add the package's reference assemblies as `MetadataReference` entries in the `Compilation`.
 3. IF a package cannot be resolved after exhausting all configured feeds, THEN THE `NuGet_Resolver` SHALL emit a `Diagnostic` of severity `Error` identifying the package name and version, and THE `Project_Loader` SHALL continue loading remaining references.
 4. THE `NuGet_Resolver` SHALL resolve transitive dependencies and include their assemblies in the `Compilation`.
-5. WHERE a `Mapping_Config` specifies a custom NuGet feed URL, THE `NuGet_Resolver` SHALL query that feed before falling back to `nuget.org`.
+5. WHERE the `Config_Service` returns a non-empty `nugetFeedUrls` list, THE `NuGet_Resolver` SHALL query those feeds in order before falling back to `nuget.org`.
 
 ---
 
@@ -74,7 +74,7 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 1. WHEN a target framework is determined, THE `SDK_Resolver` SHALL locate the matching .NET SDK reference assemblies on the host machine.
 2. WHEN the SDK reference assemblies are located, THE `Project_Loader` SHALL add them as `MetadataReference` entries in the `Compilation`.
 3. IF no matching SDK installation is found for the target framework, THEN THE `SDK_Resolver` SHALL emit a `Diagnostic` of severity `Error` identifying the missing SDK version.
-4. WHERE a `Mapping_Config` specifies an explicit SDK path, THE `SDK_Resolver` SHALL use that path instead of auto-detecting the SDK.
+4. WHERE the `Config_Service` returns a non-null `sdkPath`, THE `SDK_Resolver` SHALL use that path instead of auto-detecting the SDK.
 5. WHEN multiple SDK versions satisfy the target framework, THE `SDK_Resolver` SHALL select the highest compatible version.
 
 ---
@@ -119,13 +119,15 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 ---
 
-### Requirement 9: Parse and Validate the Mapping Configuration
+### Requirement 9: Consume the Configuration Service
 
-**User Story:** As a developer, I want the `Project_Loader` to read and validate the optional `transpiler.yaml` configuration file, so that custom SDK paths and NuGet feed overrides are applied before loading begins.
+**User Story:** As a pipeline integrator, I want the `Project_Loader` to receive configuration values through the `IConfigService` interface, so that SDK path and NuGet feed settings are applied consistently without the loader performing its own file I/O.
 
 #### Acceptance Criteria
 
-1. WHEN a `transpiler.yaml` file is present in the same directory as the entry-point `.csproj` or `.sln` file, THE `Project_Loader` SHALL parse it into a `Mapping_Config` object before beginning project loading and store it in `Load_Result.Config`.
-2. WHEN a `transpiler.yaml` file is absent, THE `Project_Loader` SHALL populate `Load_Result.Config` with a default `Mapping_Config` instance (all fields at their documented defaults) and proceed without emitting a diagnostic.
-3. IF the `transpiler.yaml` file is present but contains invalid YAML or unrecognized fields, THEN THE `Project_Loader` SHALL emit a `Diagnostic` of severity `Error` identifying the offending field or line, set `Load_Result.Success = false`, and halt loading.
-4. FOR ALL valid `Mapping_Config` objects, parsing then serializing then parsing SHALL produce an equivalent `Mapping_Config` object (round-trip property).
+1. THE `Project_Loader` SHALL accept an `IConfigService` instance at construction time and SHALL use it as the sole source of all configuration values.
+2. THE `Project_Loader` SHALL NOT read or parse `transpiler.yaml` directly; all configuration access SHALL go through `IConfigService`.
+3. WHEN `IConfigService.sdkPath` returns a non-null value, THE `SDK_Resolver` SHALL use that path for SDK resolution.
+4. WHEN `IConfigService.nugetFeedUrls` returns a non-empty list, THE `NuGet_Resolver` SHALL query those feeds in the returned order before falling back to `nuget.org`.
+5. FOR ALL valid `IConfigService` instances, constructing a `Project_Loader` with the same instance and loading the same project SHALL produce an equivalent `Load_Result` (determinism under config).
+6. THE `Project_Loader` SHALL store the Config_Object obtained from `IConfigService.config` in `Load_Result.Config` so that downstream stages can inspect the active configuration without holding a reference to `IConfigService`.

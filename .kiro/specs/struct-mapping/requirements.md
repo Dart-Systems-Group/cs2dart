@@ -157,7 +157,7 @@
 4. THE Struct_Transpiler SHALL map `System.DateOnly` to Dart's `DateTime` (date-only usage) or a configured third-party equivalent, and emit a diagnostic noting the approximation.
 5. THE Struct_Transpiler SHALL map `System.TimeOnly` to Dart's `Duration` or a configured third-party equivalent, and emit a diagnostic noting the approximation.
 6. WHEN a BCL struct method or property has no direct Dart equivalent, THE Struct_Transpiler SHALL emit a `// TODO: no Dart equivalent for <member>` comment and a build-time diagnostic.
-7. THE Struct_Transpiler SHALL allow BCL struct mappings to be overridden via the `transpiler.yaml` configuration file.
+7. THE Struct_Transpiler SHALL allow BCL struct mappings to be overridden via `IConfigService.structMappings`.
 
 ---
 
@@ -171,3 +171,17 @@
 2. THE Struct_Transpiler SHALL produce deterministic output for struct transpilation: the same C# struct input SHALL always produce the same Dart output.
 3. FOR ALL C# structs that are fully supported, the generated Dart class SHALL pass `dart analyze` with zero errors.
 4. THE Struct_Transpiler SHALL track struct transpilation coverage in the feature support matrix, reporting the percentage of C# struct features with full, partial, or no Dart mapping.
+
+---
+
+## Requirement 13: Consume the Configuration Service
+
+**User Story:** As a pipeline module author, I want the `Struct_Transpiler` to receive all configuration values through `IConfigService`, so that it is decoupled from YAML parsing and file I/O.
+
+### Acceptance Criteria
+
+1. THE Struct_Transpiler SHALL accept an `IConfigService` instance at construction time and SHALL use it as the sole source of all configuration values.
+2. THE Struct_Transpiler SHALL NOT read or parse `transpiler.yaml` directly; all configuration access SHALL go through `IConfigService`.
+3. WHEN `IConfigService.structMappings` contains an entry for a given C# struct name, THE Struct_Transpiler SHALL use the configured Dart type and member mappings instead of the defaults.
+4. WHEN `IConfigService.namingConventions` specifies a non-default `classNameStyle`, THE Struct_Transpiler SHALL apply that style when generating Dart class names for structs.
+5. WHEN all `IConfigService` accessors return their Default_Values, THE Struct_Transpiler SHALL apply all default struct mapping rules without error.

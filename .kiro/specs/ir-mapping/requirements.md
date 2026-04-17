@@ -138,9 +138,9 @@ idiomatic Dart collection operations without understanding LINQ semantics.
 
 1. THE IR_Builder SHALL lower LINQ query syntax (e.g., `from x in xs where ... select ...`) to equivalent LINQ method-chain form before emitting IR nodes.
 2. THE IR_Builder SHALL represent each LINQ method call (`Where`, `Select`, `OrderBy`, `GroupBy`, `Join`, `Aggregate`, etc.) as an `InvocationExpression` IR node with the method resolved to its `System.Linq.Enumerable` or `System.Linq.Queryable` IR_Symbol.
-3. WHERE `Load_Result.Config.linq_strategy` is `lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
-4. WHERE `Load_Result.Config.linq_strategy` is `preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
-5. WHEN `Load_Result.Config` is a default instance or `linq_strategy` is absent, THE IR_Builder SHALL default to `preserve_functional` behaviour.
+3. WHERE `IConfigService.linqStrategy` returns `lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
+4. WHERE `IConfigService.linqStrategy` returns `preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
+5. WHEN `IConfigService.linqStrategy` returns its Default_Value (i.e., no `linq_strategy` was set in `transpiler.yaml`), THE IR_Builder SHALL apply `preserve_functional` behaviour.
 6. THE IR_Builder SHALL attach the element IR_Type and result IR_Type to every LINQ `InvocationExpression` node.
 
 ---

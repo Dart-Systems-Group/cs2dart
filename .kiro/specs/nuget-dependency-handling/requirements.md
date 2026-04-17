@@ -180,11 +180,46 @@ This document specifies the requirements for the **NuGet dependency handling** s
 
 #### Acceptance Criteria
 
-1. THE NuGet_Handler SHALL produce a `dependency_report.md` file in the output package root summarizing: total packages resolved, count per tier, list of Tier_3 stubs generated, and any version conflicts encountered.
-2. EACH diagnostic emitted by THE NuGet_Handler SHALL contain: a severity level (Error, Warning, Info), a stable diagnostic code (e.g., `CS2DART_NUGET_001`), a human-readable message, and the source `.csproj` file path and line number where applicable.
+1. THE NuGet_Handler SHALL produce a `dependency_report.md` file in the output package root conforming to the following schema:
+
+   **Required sections (in order):**
+
+   ```markdown
+   # NuGet Dependency Report
+
+   ## Summary
+
+   | Metric | Count |
+   |---|---|
+   | Total packages resolved | <integer> |
+   | Tier 1 (mapped) | <integer> |
+   | Tier 2 (transpiled) | <integer> |
+   | Tier 3 (stubbed) | <integer> |
+
+   ## Tier 3 Stubs
+
+   | Package ID | Resolved Version | Stub File | Types Stubbed |
+   |---|---|---|---|
+   | <package_id> | <semver> | `lib/src/stubs/<package_id>.dart` | <integer> |
+
+   ## Version Conflicts
+
+   | Package ID | Requested By | Required Range | Resolved Version |
+   |---|---|---|---|
+   | <package_id> | <dependent_package_id> | <nuget_version_range> | <semver> |
+   ```
+
+   - The **Summary** section SHALL always be present, even when all counts are zero.
+   - The **Tier 3 Stubs** table SHALL contain one row per Tier_3 package; WHEN no Tier_3 packages exist, the section SHALL contain the text `_No Tier 3 stubs generated._` in place of the table.
+   - The **Version Conflicts** section SHALL contain one row per conflict recorded during transitive resolution (per Requirement 2.2–2.3); WHEN no conflicts exist, the section SHALL contain the text `_No version conflicts encountered._` in place of the table.
+   - The `Resolved Version` column in the **Version Conflicts** table SHALL be the version selected by NuGet's lowest-applicable-version rule, or the text `UNRESOLVED` when no satisfying version exists.
+   - Rows in both tables SHALL be sorted alphabetically by Package ID.
+
+2. EACH diagnostic emitted by THE NuGet_Handler SHALL contain: a severity level (Error, Warning, Info), a stable diagnostic code (e.g., `NR0001`), a human-readable message, and the source `.csproj` file path and line number where applicable.
 3. THE NuGet_Handler SHALL NOT emit duplicate diagnostics for the same package ID and diagnostic code within a single run.
 4. WHEN all NuGet dependencies are resolved to Tier_1 or Tier_2 with no errors, THE NuGet_Handler SHALL emit a single Info diagnostic confirming successful dependency resolution.
 5. THE NuGet_Handler SHALL include NuGet dependency handling coverage in the transpiler's feature support matrix, tracking the percentage of resolved packages per tier across a run.
+6. IF the output directory is not writable when THE NuGet_Handler attempts to write `dependency_report.md`, THEN THE NuGet_Handler SHALL emit a diagnostic error with code `NR0002` containing the target file path and the underlying I/O error message, and SHALL continue pipeline execution without writing the report file.
 
 ---
 

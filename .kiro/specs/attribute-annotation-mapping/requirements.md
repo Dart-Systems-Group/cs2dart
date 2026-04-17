@@ -42,6 +42,7 @@ structured data and promotes it into IR nodes without consulting Roslyn.
 - **Dart_Generator**: The pipeline stage that emits Dart source from IR nodes. Extended by this feature to emit Dart annotations from `Attribute_Node` instances.
 - **Config_Service**: The pipeline component that parses and exposes `transpiler.yaml`. Extended by this feature to expose the `attribute_mappings` section.
 - **Mapping_Config**: The configuration object passed through the pipeline via `Load_Result.Config`. Extended by this feature with an `attribute_mappings` field.
+- **Synthesized_Attribute**: A C# attribute injected by the compiler into the `SemanticModel` with no corresponding syntax in any source file, identified by `AttributeData.ApplicationSyntaxReference == null`. Examples: `[CompilerGenerated]` on async state-machine types, `[IteratorStateMachine]` on iterator methods. Excluded at the Roslyn_Frontend extraction boundary per RF Requirement 10.6; they never appear in the `Normalized_SyntaxTree` and therefore never produce an `Attribute_Node` in the IR.
 - **Diagnostic**: A pipeline-wide structured record. Contains `Severity` (`Error`, `Warning`, `Info`), `Code` (string `<prefix><4-digits>`), `Message` (string), optional `Source` (file path), and optional `Location` (`{ Line, Column }`). Full schema defined in the top-level transpiler specification.
 
 ---
@@ -258,7 +259,7 @@ a wide range of C# attribute inputs.
 
 #### Acceptance Criteria
 
-1. FOR ALL valid `Frontend_Result` inputs, the count of `Attribute_Node` instances in the IR SHALL equal the count of structured attribute records attached to declaration nodes in the `Normalized_SyntaxTree` by the Roslyn_Frontend (attribute count preservation property).
+1. FOR ALL valid `Frontend_Result` inputs, the count of `Attribute_Node` instances in the IR SHALL equal the count of structured attribute records attached to declaration nodes in the `Normalized_SyntaxTree` by the Roslyn_Frontend (source-declared attribute count preservation property). Because the Roslyn_Frontend excludes compiler-synthesized attributes at the extraction boundary per RF Requirement 10.6, the structured records in the `Normalized_SyntaxTree` are already a source-only set and no further qualifier is needed here.
 2. FOR ALL valid IR trees containing `Attribute_Node` instances, parsing the Pretty_Printer output SHALL produce an IR tree where every `Attribute_Node` is structurally and value-equal to the original (round-trip property).
 3. FOR ALL `Attribute_Node` instances, THE `Attribute_Mapper` SHALL produce exactly one of: a Dart annotation string, or an unmapped comment string — never both and never neither (total mapping property).
 4. FOR ALL `Attribute_Node` instances with a Known_Mapping, the generated Dart annotation SHALL be syntactically valid Dart (syntactic validity property).

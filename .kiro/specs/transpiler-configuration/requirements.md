@@ -57,9 +57,9 @@ This document specifies the requirements for the **Configuration Service** of th
 #### Acceptance Criteria
 
 1. THE Config_Service SHALL expose a single interface `IConfigService` (or language-equivalent) with the following read-only accessor methods, one per Config_Section:
-   - `LinqStrategy get linqStrategy` — returns `lower_to_loops` or `preserve_functional`; default: `lower_to_loops`
+   - `LinqStrategy get linqStrategy` — returns `lower_to_loops` or `preserve_functional`; default: `preserve_functional`
    - `NullabilityConfig get nullability` — returns nullability rules (see Requirement 4)
-   - `AsyncConfig get async` — returns async/await behavior settings (see Requirement 5)
+   - `AsyncConfig get asyncBehavior` — returns async/await behavior settings; (`async_behavior` in `transpiler.yaml`, see Requirement 5)
    - `Map<String, String> get namespaceMappings` — returns fully-qualified C# namespace → Dart library path overrides; default: empty map
    - `String? get rootNamespace` — returns the namespace prefix to strip; default: null
    - `bool get barrelFiles` — returns whether barrel export files are generated; default: false
@@ -67,13 +67,13 @@ This document specifies the requirements for the **Configuration Service** of th
    - `bool get autoResolveConflicts` — returns whether namespace conflicts are auto-resolved; default: false
    - `EventStrategy get eventStrategy` — returns `stream` or `callback`; default: `stream`
    - `Map<String, EventMappingOverride> get eventMappings` — returns per-event overrides; default: empty map
-   - `Map<String, String> get nugetMappings` — returns NuGet package → Dart package overrides; default: empty map
+   - `Map<String, String> get packageMappings` — returns NuGet package name → Dart package name overrides; default: empty map (`package_mappings` in `transpiler.yaml`)
    - `String? get sdkPath` — returns explicit .NET SDK path override; default: null
-   - `List<String> get nugetFeedUrls` — returns ordered list of NuGet feed URLs; default: `["https://api.nuget.org/v3/index.json"]`
+   - `List<String> get nugetFeedUrls` — returns ordered list of NuGet feed URLs to query before falling back to `nuget.org`; default: `["https://api.nuget.org/v3/index.json"]` (`nuget_feeds` in `transpiler.yaml`)
    - `Map<String, String> get libraryMappings` — returns .NET type → Dart type overrides; default: empty map
    - `Map<String, StructMappingOverride> get structMappings` — returns per-struct BCL overrides; default: empty map
    - `NamingConventions get namingConventions` — returns naming convention settings; default: all Dart-idiomatic defaults
-   - `List<String> get experimentalFeatures` — returns list of enabled experimental feature flags; default: empty list
+   - `Map<String, bool> get experimentalFeatures` — returns feature-flag toggles for in-progress features; default: empty map (`experimental` in `transpiler.yaml`)
 2. ALL accessor methods SHALL be pure (no side effects, no I/O) after the Config_Object is constructed.
 3. THE `IConfigService` interface SHALL be the only mechanism by which pipeline modules access configuration; direct file I/O or YAML parsing within pipeline modules is forbidden.
 4. THE Config_Service SHALL be constructed once at pipeline startup and passed to all pipeline modules via dependency injection or an equivalent mechanism; it SHALL NOT use global/static mutable state.
@@ -105,7 +105,7 @@ This document specifies the requirements for the **Configuration Service** of th
 1. THE Config_Service SHALL expose an `AsyncConfig` value object with the following fields:
    - `bool omitConfigureAwait` — when true, `ConfigureAwait(false)` calls are silently dropped; default: false
    - `bool mapValueTaskToFuture` — when true, `ValueTask<T>` is mapped to `Future<T>`; default: true
-2. IF an unrecognized key appears under the `async` section, THE Config_Service SHALL emit a Config_Diagnostic of severity `Warning` and ignore the key.
+2. IF an unrecognized key appears under the `async_behavior` section, THE Config_Service SHALL emit a Config_Diagnostic of severity `Warning` and ignore the key.
 
 ---
 
@@ -140,7 +140,33 @@ This document specifies the requirements for the **Configuration Service** of th
 
 ---
 
-### Requirement 8: Correctness Properties for Property-Based Testing
+### Requirement 9: Load_Result Config Field
+
+**User Story:** As a pipeline integrator, I want the `Load_Result` to carry the active Config_Object, so that downstream stages and diagnostic reporters can inspect which configuration was in effect for a given run without re-reading the file.
+
+#### Acceptance Criteria
+
+1. THE Config_Service SHALL expose the resolved Config_Object via a `get config` accessor so that the `Project_Loader` can store it in `Load_Result.Config` after pipeline initialization.
+2. WHEN `Load_Result.Config` is read by any downstream stage, it SHALL be value-equal to the Config_Object returned by `IConfigService` accessors for the same run (consistency property).
+3. WHEN no `transpiler.yaml` was found, `Load_Result.Config` SHALL be a default Config_Object (all fields at documented Default_Values), not null.
+4. FOR ALL valid `transpiler.yaml` files, parsing then serializing `Load_Result.Config` then parsing again SHALL produce a Config_Object that is value-equal to the original (round-trip property).
+
+---
+
+### Requirement 10: LINQ Strategy Default
+
+**User Story:** As a developer, I want the default LINQ strategy to be `preserve_functional`, so that generated Dart code uses idiomatic collection method chains unless I explicitly opt in to loop lowering.
+
+#### Acceptance Criteria
+
+1. WHEN `linq_strategy` is absent from `transpiler.yaml`, `IConfigService.linqStrategy` SHALL return `preserve_functional`.
+2. WHEN `linq_strategy` is set to `lower_to_loops`, `IConfigService.linqStrategy` SHALL return `lower_to_loops`.
+3. WHEN `linq_strategy` is set to `preserve_functional`, `IConfigService.linqStrategy` SHALL return `preserve_functional`.
+4. IF `linq_strategy` is set to any value other than `lower_to_loops` or `preserve_functional`, THE Config_Service SHALL emit a Config_Diagnostic of severity `Error` identifying the invalid value and halt pipeline initialization.
+
+---
+
+### Requirement 11: Correctness Properties for Property-Based Testing
 
 **User Story:** As a transpiler test engineer, I want well-defined correctness properties for the Config_Service, so that I can write property-based tests that catch regressions across a wide range of config inputs.
 

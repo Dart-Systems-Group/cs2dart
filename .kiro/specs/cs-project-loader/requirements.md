@@ -8,14 +8,15 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 - **Project_Loader**: The component described by this specification; responsible for loading C# projects and producing `Compilation` objects.
 - **Compilation**: A Roslyn `Microsoft.CodeAnalysis.CSharp.CSharpCompilation` instance containing the full semantic model for one logical C# project.
-- **IR_Builder**: The downstream component that consumes a `Compilation` object and produces the language-agnostic intermediate representation.
+- **IR_Builder**: The downstream component that consumes a `Load_Result` and produces the language-agnostic intermediate representation.
 - **Solution**: A `.sln` file that groups one or more C# projects.
 - **Project**: A single `.csproj` file representing one compilable unit.
 - **NuGet_Resolver**: The sub-component responsible for locating and restoring NuGet package assemblies.
 - **SDK_Resolver**: The sub-component responsible for locating the .NET SDK and its reference assemblies.
-- **Diagnostic**: A structured message (error, warning, or info) produced by the `Project_Loader` describing a problem encountered during loading.
-- **Dependency_Graph**: A directed acyclic graph of `Project` nodes and their inter-project and NuGet dependencies.
-- **Load_Result**: The output of the `Project_Loader`; contains one `Compilation` per project and a list of `Diagnostic` items.
+- **Diagnostic**: A pipeline-wide structured record emitted by any transpiler component. Every `Diagnostic` contains: `Severity` (one of `Error`, `Warning`, `Info`), `Code` (a string in the format `<prefix><4-digit-number>`, e.g. `PL0001`), `Message` (human-readable string), `Source` (optional file path), and `Location` (optional line and column numbers). Components use reserved code prefixes to avoid collisions: `PL` for Project_Loader, `IR` for IR_Builder, `CG` for code generator.
+- **Dependency_Graph**: A directed acyclic graph of `Project_Entry` nodes representing inter-project dependencies, used to determine topological processing order.
+- **Project_Entry**: A record within `Load_Result` representing one loaded project. Contains: `ProjectPath` (absolute path to the `.csproj` file), `ProjectName` (assembly name), `TargetFramework` (resolved TFM string, e.g. `net8.0`), `OutputKind` (one of `Exe`, `Library`, `WinExe`), `LangVersion` (resolved C# language version string), `NullableEnabled` (boolean), `Compilation` (the Roslyn `CSharpCompilation` for this project), `PackageReferences` (list of `{ PackageName, Version }` records for resolved NuGet packages), and `Diagnostics` (list of `Diagnostic` items scoped to this project).
+- **Load_Result**: The complete output of the `Project_Loader`. Contains: `Projects` (ordered list of `Project_Entry` items in topological dependency order, leaf projects first), `DependencyGraph` (the full `Dependency_Graph`), `Diagnostics` (aggregated list of all `Diagnostic` items from all sub-components), `Success` (boolean, true when no `Diagnostic` of severity `Error` is present), and `Config` (the active Config_Object from the Config_Service, never null; contains Default_Values when no `transpiler.yaml` was found).
 - **Config_Service**: The `IConfigService` instance provided to the `Project_Loader` at construction time; the sole source of all configuration values. The `Project_Loader` SHALL NOT read `transpiler.yaml` directly.
 
 ---
@@ -28,10 +29,10 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 #### Acceptance Criteria
 
-1. WHEN a valid `.csproj` file path is provided, THE `Project_Loader` SHALL parse the project file and produce a `Load_Result` containing exactly one `Compilation`.
-2. WHEN a valid `.sln` file path is provided, THE `Project_Loader` SHALL parse the solution file and produce a `Load_Result` containing one `Compilation` per project defined in the solution.
-3. IF the provided file path does not exist, THEN THE `Project_Loader` SHALL return a `Load_Result` with zero `Compilation` objects and at least one `Diagnostic` of severity `Error` identifying the missing path.
-4. IF the provided file has an extension other than `.csproj` or `.sln`, THEN THE `Project_Loader` SHALL return a `Load_Result` with zero `Compilation` objects and at least one `Diagnostic` of severity `Error` describing the unsupported file type.
+1. WHEN a valid `.csproj` file path is provided, THE `Project_Loader` SHALL parse the project file and produce a `Load_Result` whose `Projects` list contains exactly one `Project_Entry`.
+2. WHEN a valid `.sln` file path is provided, THE `Project_Loader` SHALL parse the solution file and produce a `Load_Result` whose `Projects` list contains one `Project_Entry` per project defined in the solution.
+3. IF the provided file path does not exist, THEN THE `Project_Loader` SHALL return a `Load_Result` with an empty `Projects` list, `Success = false`, and at least one `Diagnostic` of severity `Error` identifying the missing path.
+4. IF the provided file has an extension other than `.csproj` or `.sln`, THEN THE `Project_Loader` SHALL return a `Load_Result` with an empty `Projects` list, `Success = false`, and at least one `Diagnostic` of severity `Error` describing the unsupported file type.
 5. THE `Project_Loader` SHALL accept file paths as both absolute and relative paths, resolving relative paths against the current working directory.
 
 ---
@@ -43,10 +44,10 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 #### Acceptance Criteria
 
 1. WHEN a `.csproj` file is parsed, THE `Project_Loader` SHALL enumerate all `<Compile>` and implicitly included `*.cs` source files relative to the project directory.
-2. WHEN a `.csproj` file is parsed, THE `Project_Loader` SHALL extract the `<TargetFramework>` or `<TargetFrameworks>` value and select a single target framework for compilation.
+2. WHEN a `.csproj` file is parsed, THE `Project_Loader` SHALL extract the `<TargetFramework>` or `<TargetFrameworks>` value, select a single target framework, and record it in the `Project_Entry.TargetFramework` field.
 3. WHEN a `.csproj` file specifies `<ProjectReference>` elements, THE `Project_Loader` SHALL resolve each referenced project and include its `Compilation` as a metadata reference in the referencing project's `Compilation`.
 4. IF a `<ProjectReference>` path cannot be resolved, THEN THE `Project_Loader` SHALL emit a `Diagnostic` of severity `Error` identifying the unresolvable reference and continue loading remaining projects.
-5. WHEN a `.csproj` file specifies `<Nullable>enable</Nullable>`, THE `Project_Loader` SHALL enable nullable reference type analysis in the resulting `Compilation`.
+5. WHEN a `.csproj` file specifies `<Nullable>enable</Nullable>`, THE `Project_Loader` SHALL enable nullable reference type analysis in the resulting `Compilation` and set `Project_Entry.NullableEnabled = true`.
 
 ---
 
@@ -85,9 +86,9 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 #### Acceptance Criteria
 
 1. WHEN a `.sln` file is loaded, THE `Project_Loader` SHALL construct a `Dependency_Graph` from the inter-project references declared in each `.csproj` file.
-2. WHEN the `Dependency_Graph` is constructed, THE `Project_Loader` SHALL produce `Compilation` objects in topological order, leaf projects first.
-3. IF the `Dependency_Graph` contains a cycle, THEN THE `Project_Loader` SHALL emit a `Diagnostic` of severity `Error` identifying all projects involved in the cycle and return a `Load_Result` with zero `Compilation` objects.
-4. THE `Project_Loader` SHALL expose the `Dependency_Graph` as part of the `Load_Result` so that the `IR_Builder` can process projects in dependency order.
+2. WHEN the `Dependency_Graph` is constructed, THE `Project_Loader` SHALL populate `Load_Result.Projects` in topological order, leaf projects first, so that every `Project_Entry` appears after all projects it depends on.
+3. IF the `Dependency_Graph` contains a cycle, THEN THE `Project_Loader` SHALL emit a `Diagnostic` of severity `Error` identifying all projects involved in the cycle and return a `Load_Result` with an empty `Projects` list and `Success = false`.
+4. THE `Project_Loader` SHALL set `Load_Result.DependencyGraph` to the constructed `Dependency_Graph` so that the `IR_Builder` can traverse projects in dependency order without recomputing it.
 
 ---
 
@@ -97,11 +98,11 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 #### Acceptance Criteria
 
-1. THE `Project_Loader` SHALL produce each `Compilation` using `CSharpCompilation.Create` with all source syntax trees, metadata references, and compilation options derived from the project file.
-2. WHEN a `Compilation` is produced, THE `Project_Loader` SHALL set the `OutputKind` to match the project's `<OutputType>` element (`Exe`, `Library`, or `WinExe`).
-3. WHEN a `Compilation` is produced, THE `Project_Loader` SHALL set the `LangVersion` to match the `<LangVersion>` element in the project file, defaulting to `Latest` when the element is absent.
+1. THE `Project_Loader` SHALL produce each `Compilation` using `CSharpCompilation.Create` with all source syntax trees, metadata references, and compilation options derived from the project file, and store it in the corresponding `Project_Entry.Compilation` field.
+2. WHEN a `Compilation` is produced, THE `Project_Loader` SHALL set `Project_Entry.OutputKind` to match the project's `<OutputType>` element (`Exe`, `Library`, or `WinExe`), defaulting to `Library` when the element is absent.
+3. WHEN a `Compilation` is produced, THE `Project_Loader` SHALL set `Project_Entry.LangVersion` to match the `<LangVersion>` element in the project file, defaulting to `Latest` when the element is absent.
 4. THE `Project_Loader` SHALL include all resolved source syntax trees in the `Compilation` such that `Compilation.SyntaxTrees.Count` equals the number of `.cs` files enumerated for the project.
-5. WHEN the `Compilation` contains Roslyn `Diagnostic` entries of severity `Error`, THE `Project_Loader` SHALL propagate those diagnostics into the `Load_Result` alongside the `Compilation`.
+5. WHEN the `Compilation` contains Roslyn `Diagnostic` entries of severity `Error`, THE `Project_Loader` SHALL propagate those diagnostics into both `Project_Entry.Diagnostics` and `Load_Result.Diagnostics`.
 
 ---
 
@@ -111,10 +112,10 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 
 #### Acceptance Criteria
 
-1. THE `Project_Loader` SHALL represent every diagnostic as a `Diagnostic` record containing: severity (`Error`, `Warning`, `Info`), a unique diagnostic code, a human-readable message, and an optional source location (file path and line number).
-2. WHEN loading completes, THE `Load_Result` SHALL contain the complete list of all `Diagnostic` objects emitted during loading, including those from the `NuGet_Resolver` and `SDK_Resolver`.
-3. IF loading produces zero `Diagnostic` entries of severity `Error`, THE `Load_Result` SHALL be considered successful.
-4. THE `Project_Loader` SHALL assign diagnostic codes in the range `PL0001`–`PL9999` to distinguish loader diagnostics from Roslyn compiler diagnostics.
+1. THE `Project_Loader` SHALL represent every diagnostic as a `Diagnostic` record conforming to the pipeline-wide schema: `Severity` (`Error`, `Warning`, `Info`), `Code` (string), `Message` (string), optional `Source` (file path), and optional `Location` (line and column).
+2. WHEN loading completes, `Load_Result.Diagnostics` SHALL contain the union of all `Diagnostic` objects emitted during loading, including those from the `NuGet_Resolver`, `SDK_Resolver`, and all `Project_Entry.Diagnostics` lists.
+3. THE `Project_Loader` SHALL set `Load_Result.Success = true` if and only if `Load_Result.Diagnostics` contains no entry with `Severity = Error`.
+4. THE `Project_Loader` SHALL assign diagnostic codes in the range `PL0001`–`PL9999`; no other pipeline component SHALL use the `PL` prefix.
 
 ---
 
@@ -129,3 +130,4 @@ The C# Project Loader is the entry-point component of the cs2dart transpiler pip
 3. WHEN `IConfigService.sdkPath` returns a non-null value, THE `SDK_Resolver` SHALL use that path for SDK resolution.
 4. WHEN `IConfigService.nugetFeedUrls` returns a non-empty list, THE `NuGet_Resolver` SHALL query those feeds in the returned order before falling back to `nuget.org`.
 5. FOR ALL valid `IConfigService` instances, constructing a `Project_Loader` with the same instance and loading the same project SHALL produce an equivalent `Load_Result` (determinism under config).
+6. THE `Project_Loader` SHALL store the Config_Object obtained from `IConfigService.config` in `Load_Result.Config` so that downstream stages can inspect the active configuration without holding a reference to `IConfigService`.

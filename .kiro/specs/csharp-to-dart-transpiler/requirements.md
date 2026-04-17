@@ -77,8 +77,32 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
 - Dart package (`pubspec.yaml`, `lib/`, `test/`)
 - Generated Dart source files
 - Mapping reports (C# → Dart)
-- Diagnostics and warnings
+- `TranspilerResult`: a structured result object containing the list of generated file paths, a `Diagnostic` list (see §5.1), and a boolean `Success` flag (true when no `Error`-severity diagnostics are present)
 - Optional: Dart extension libraries for .NET‑like APIs
+
+### 5.1 Diagnostic schema
+
+Every component in the transpiler pipeline emits diagnostics using a shared `Diagnostic` record with the following fields:
+
+| Field      | Type                          | Required | Description                                              |
+|------------|-------------------------------|----------|----------------------------------------------------------|
+| `Severity` | `Error` \| `Warning` \| `Info` | Yes      | Impact level of the diagnostic                           |
+| `Code`     | string (`<prefix><4-digits>`) | Yes      | Stable, unique code. Prefix is component-reserved (see below) |
+| `Message`  | string                        | Yes      | Human-readable description of the issue                  |
+| `Source`   | string (file path)            | No       | Path to the file where the issue originates              |
+| `Location` | `{ Line: int, Column: int }`  | No       | Line and column within `Source`                          |
+
+**Reserved diagnostic code prefixes:**
+
+| Prefix | Component            | Range           |
+|--------|----------------------|-----------------|
+| `PL`   | Project_Loader       | `PL0001–PL9999` |
+| `IR`   | IR_Builder           | `IR0001–IR9999` |
+| `CG`   | Dart code generator  | `CG0001–CG9999` |
+| `NR`   | NuGet dependency handler | `NR0001–NR9999` |
+| `VA`   | Validation & analysis | `VA0001–VA9999` |
+
+No two components SHALL share a prefix. Roslyn compiler diagnostics are passed through with their original `CS`-prefixed codes and are not renumbered.
 
 ---
 
@@ -152,7 +176,6 @@ All transpiler configuration is managed by the **Configuration Service** (`IConf
 - Struct mapping overrides (`structMappings`)
 - Experimental feature toggles (`experimentalFeatures`)
 
-See the **Transpiler Configuration Service** spec for the full `IConfigService` interface definition, all supported keys, default values, and validation rules.
 
 ---
 

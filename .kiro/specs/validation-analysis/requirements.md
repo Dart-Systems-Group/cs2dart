@@ -80,7 +80,7 @@ Validator, so that the Dart_Generator and the final TranspilerResult can evolve 
    `TranspilerResult.Diagnostics` contains no entry with `Severity = Error` across all upstream
    and VA diagnostics.
 5. THE Validator SHALL propagate all diagnostics from `Gen_Result.Diagnostics` (which already
-   contains the aggregated `PL`, `RF`, `IR`, `CG`, and `NR` diagnostics from upstream stages)
+   contains the aggregated `CFG`, `PL`, `NR`, `RF`, `IR`, and `CG` diagnostics from upstream stages)
    into `TranspilerResult.Diagnostics` unchanged, so that `TranspilerResult` is the single
    authoritative diagnostic list for the entire pipeline run.
 6. THE Validator SHALL complete the formatting pass before starting the analysis pass; all files
@@ -213,7 +213,7 @@ inspect success, enumerate generated files, and read all diagnostics from one pl
    - `Packages` — the list of `Output_Package` records, one per generated Dart package, in the
      same order as `Gen_Result.Packages`
    - `Diagnostics` — the complete ordered list of all diagnostics from all pipeline stages,
-     ordered by stage (PL → RF → IR → CG → NR → VA) and within each stage by source file path
+     ordered by stage (CFG → PL → NR → RF → IR → CG → VA) and within each stage by source file path
      and line number
    - `Success` — `true` if and only if `Diagnostics` contains no `Error`-severity entry
 2. EACH `Output_Package` in `TranspilerResult.Packages` SHALL contain: `ProjectName`,

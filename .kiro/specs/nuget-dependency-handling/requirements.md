@@ -95,6 +95,11 @@ This document specifies the requirements for the **NuGet dependency handling** s
    | `System.Reactive` (Rx.NET) | `rxdart` (pub.dev) |
    | `FluentValidation` | generated validation stub |
 
+   > **`System.Text.Json` classification note:** `System.Text.Json` is inbox BCL on `net5.0`+ but a standalone NuGet package on `netstandard2.x` and `net4x`. The NuGet_Handler SHALL apply TFM-conditional classification:
+   > - WHEN `Project_Entry.TargetFramework` is `net5.0` or later AND no explicit `<PackageReference>` for `System.Text.Json` is present in the project file, THE NuGet_Handler SHALL synthesize a virtual Tier_1 BCL entry (mapping to `dart:convert`) without adding a `pubspec.yaml` dependency entry, since `dart:convert` is always available.
+   > - WHEN `Project_Entry.TargetFramework` is `netstandard2.x`, `net4x`, or any pre-`net5.0` TFM, OR when an explicit `<PackageReference>` for `System.Text.Json` is present regardless of TFM, THE NuGet_Handler SHALL classify it as a regular Tier_1 NuGet package via the Mapping_Registry and add the `dart:convert` mapping to `pubspec.yaml` as normal.
+   > This ensures `System.Text.Json` never appears in both the BCL synthetic path and the NuGet package path simultaneously for the same project.
+
 2. WHEN a Tier_1 package is resolved, THE NuGet_Handler SHALL add the corresponding Dart package and version constraint to the `dependencies` section of `pubspec.yaml`.
 3. WHEN a Tier_1 mapping includes an API_Shim, THE NuGet_Handler SHALL emit the shim Dart file into `lib/src/shims/` and add the necessary `import` statements to transpiled files that reference the mapped package's types.
 4. WHEN a Tier_1 package version falls outside the mapping's supported version range, THE NuGet_Handler SHALL emit a diagnostic warning and apply the mapping anyway, noting the version mismatch.

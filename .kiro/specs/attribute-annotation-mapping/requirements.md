@@ -224,7 +224,7 @@ is needed for well-known packages.
 #### Acceptance Criteria
 
 1. WHEN the NuGet_Handler resolves a package to a Dart equivalent and that package has a known attribute mapping table, THE NuGet_Handler SHALL populate the `attribute_mappings` sub-map of the corresponding `Mapping_Config.package_mappings` entry before the IR_Builder runs.
-2. THE NuGet_Handler SHALL include built-in attribute mapping tables for the following packages: `Newtonsoft.Json`, `System.Text.Json` (BCL), `System.ComponentModel.DataAnnotations` (BCL), `Microsoft.EntityFrameworkCore` (partial), `xunit`, `NUnit`, `MSTest`.
+2. THE NuGet_Handler SHALL include built-in attribute mapping tables for the following packages: `Newtonsoft.Json`, `System.Text.Json` (TFM-conditional: BCL on `net5.0`+, NuGet package on older TFMs — see NuGet Requirement 4.1), `System.ComponentModel.DataAnnotations` (BCL), `Microsoft.EntityFrameworkCore` (partial), `xunit`, `NUnit`, `MSTest`.
 3. WHEN a NuGet package has no built-in attribute mapping table and no user-supplied `attribute_mappings` sub-map, THE NuGet_Handler SHALL NOT emit any diagnostic for the missing attribute mappings; the `Attribute_Mapper` will handle unmapped attributes at generation time.
 4. THE NuGet_Handler SHALL emit a diagnostic at `Info` severity for each package that contributed attribute mapping tables to `Mapping_Config`, so that the mapping report is complete. These diagnostics SHALL be collected in the NuGet_Handler's own diagnostic output (included in `Load_Result.Diagnostics` via the standard diagnostic aggregation path) and SHALL NOT be written to `Gen_Result.Diagnostics`, which is owned by the Dart_Generator.
 

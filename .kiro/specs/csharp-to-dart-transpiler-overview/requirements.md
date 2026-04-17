@@ -78,11 +78,11 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
 - Generated Dart source files
 - Mapping reports (C# → Dart)
 - `TranspilerResult`: the single authoritative output of the pipeline, assembled by the
-  Validation & Analysis stage. Contains:
+  Result Collector stage (invoked by the Validator after all tooling has completed). Contains:
   - `Packages` — list of `Output_Package` records (one per generated Dart package), each
-    carrying the package name, output path, and the list of formatted on-disk files
+    carrying the package name, output path, and the complete manifest of files written to disk
   - `Diagnostics` — the complete ordered list of all diagnostics from every pipeline stage
-    (`PL`, `RF`, `IR`, `CG`, `NR`, `VA`), ordered by stage then by source file and line number
+    (`PL`, `RF`, `IR`, `CG`, `NR`, `VA`, `RC`), ordered by stage then by source file and line number
   - `Success` — `true` if and only if `Diagnostics` contains no `Error`-severity entry across
     the entire pipeline run
 - Optional: Dart extension libraries for .NET‑like APIs
@@ -110,6 +110,7 @@ Every component in the transpiler pipeline emits diagnostics using a shared `Dia
 | `NR`   | NuGet dependency handler | `NR0001–NR9999` |
 | `VA`   | Validation & analysis    | `VA0001–VA9999` |
 | `CFG`  | Configuration Service    | `CFG0001–CFG9999` |
+| `RC`   | Result Collector         | `RC0001–RC9999` |
 
 No two components SHALL share a prefix. Roslyn compiler diagnostics are passed through with their original `CS`-prefixed codes and are not renumbered.
 
@@ -145,15 +146,21 @@ No two components SHALL share a prefix. Roslyn compiler diagnostics are passed t
    - Emits warnings for unsupported APIs
 
 6. **Validation & analysis**
-   - Writes all generated files to disk
    - Runs `dart format` over every generated `.dart` file (unconditional; always produces
      well-formed output for syntactically valid input)
    - Runs `dart analyze` as a correctness assertion — findings become `VA`-prefixed diagnostics;
      the stage never patches or retries generated code
    - Runs `dart pub get` to verify dependency resolution — failure is reported as a `Warning`
      (may be a network issue, not a transpiler bug)
-   - Assembles the final `TranspilerResult` by aggregating all upstream diagnostics (`PL`, `RF`,
-     `IR`, `CG`, `NR`) with its own `VA` findings into a single ordered diagnostic list
+   - Aggregates all upstream diagnostics (`PL`, `RF`, `IR`, `CG`, `NR`) with its own `VA`
+     findings into a single ordered diagnostic list, then forwards to the Result Collector
+
+7. **Result Collector**
+   - Receives the completed `Gen_Result` and final diagnostic list from the Validator
+   - Writes all generated artifacts to disk (`pubspec.yaml`, `lib/` files,
+     `dependency_report.md` when present)
+   - Constructs `Output_Package` records with a complete file manifest for each package
+   - Assembles and returns the final `TranspilerResult`
 
 ---
 

@@ -24,10 +24,11 @@ mapping, exit-code determination, and human-readable diagnostic formatting to st
   programmatic invocation of the Orchestrator. Fields: `InputPath` (string), `OutputDirectory`
   (string), `ConfigPath` (nullable string), `Verbose` (bool), `SkipFormat` (bool),
   `SkipAnalyze` (bool). Equivalent to the parsed CLI arguments.
-- **TranspilerResult**: The final output of the entire pipeline, assembled by the Validator.
+- **TranspilerResult**: The final output of the entire pipeline, assembled by the
+  Result_Collector (invoked by the Validator after all tooling has completed).
   Contains `Packages` (list of `Output_Package`), `Diagnostics` (complete ordered list from all
-  stages), and `Success` (true when no `Error`-severity diagnostic is present). Full schema
-  defined in the top-level transpiler specification.
+  stages including `RC`-prefixed entries), and `Success` (true when no `Error`-severity diagnostic
+  is present). Full schema defined in the Result Collector specification.
 - **Pipeline_Stage**: Any of the six ordered components invoked by the Orchestrator:
   `Config_Service`, `Project_Loader`, `Roslyn_Frontend`, `IR_Builder`, `Dart_Generator`,
   `Validator`. The NuGet dependency handler (`NR`-prefix) is integrated within the
@@ -57,6 +58,10 @@ mapping, exit-code determination, and human-readable diagnostic formatting to st
 - **NuGet_Handler**: The NuGet dependency resolution sub-component (`NR`-prefix diagnostics).
   Invoked by the `Project_Loader` during package reference resolution; its diagnostics flow into
   `Load_Result.Diagnostics` and are propagated through all subsequent stages.
+- **Result_Collector**: The passive assembly stage invoked by the Validator after all tooling
+  has completed. Receives `Gen_Result` and the final diagnostic list; writes all artifacts to
+  disk; constructs `Output_Package` records; returns `TranspilerResult`. Full contract defined in
+  the Result Collector specification.
 
 ---
 
@@ -133,7 +138,9 @@ flow contract between stages is enforced in one place.
    3. `Roslyn_Frontend.Process(Load_Result)` (produces `Frontend_Result`)
    4. `IR_Builder.Build(Frontend_Result)` (produces `IR_Build_Result`)
    5. `Dart_Generator.Generate(IR_Build_Result)` (produces `Gen_Result`)
-   6. `Validator.Validate(Gen_Result)` (produces `TranspilerResult`)
+   6. `Validator.Validate(Gen_Result)` (runs tooling, aggregates diagnostics, then invokes
+      `Result_Collector.Collect(Gen_Result, finalDiagnostics)` and returns the resulting
+      `TranspilerResult`)
 2. THE Orchestrator SHALL pass the `Load_Result` produced by `Project_Loader` directly to
    `Roslyn_Frontend.Process` without modification.
 3. THE Orchestrator SHALL pass the `Frontend_Result` produced by `Roslyn_Frontend` directly to

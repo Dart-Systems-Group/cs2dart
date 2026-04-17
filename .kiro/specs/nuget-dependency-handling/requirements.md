@@ -22,6 +22,9 @@ This document specifies the requirements for the **NuGet dependency handling** s
 - **Version_Constraint**: A NuGet version range (e.g., `[1.2.0, 2.0.0)`) or Dart version constraint (e.g., `^1.2.0`) that restricts acceptable package versions.
 - **Transitive_Dependency**: A package that is not directly referenced by the project but is required by one of its direct dependencies.
 - **API_Shim**: A thin Dart wrapper that adapts a Dart package's API to match the shape of the original .NET API, reducing the number of call-site changes needed in transpiled code.
+- **Result_Collector**: The downstream stage that receives `Dart_Package.DependencyReportContent`
+  and writes it to disk as `dependency_report.md`. The NuGet_Handler produces the content;
+  the Result_Collector owns the write. Full contract defined in the Result Collector specification.
 
 ---
 
@@ -180,7 +183,9 @@ This document specifies the requirements for the **NuGet dependency handling** s
 
 #### Acceptance Criteria
 
-1. THE NuGet_Handler SHALL produce a `dependency_report.md` file in the output package root conforming to the following schema:
+1. THE NuGet_Handler SHALL produce the content of `dependency_report.md` as a string conforming
+   to the following schema and place it in `Dart_Package.DependencyReportContent`; the
+   Result_Collector is responsible for writing this string to disk. The schema is:
 
    **Required sections (in order):**
 
@@ -219,7 +224,9 @@ This document specifies the requirements for the **NuGet dependency handling** s
 3. THE NuGet_Handler SHALL NOT emit duplicate diagnostics for the same package ID and diagnostic code within a single run.
 4. WHEN all NuGet dependencies are resolved to Tier_1 or Tier_2 with no errors, THE NuGet_Handler SHALL emit a single Info diagnostic confirming successful dependency resolution.
 5. THE NuGet_Handler SHALL include NuGet dependency handling coverage in the transpiler's feature support matrix, tracking the percentage of resolved packages per tier across a run.
-6. IF the output directory is not writable when THE NuGet_Handler attempts to write `dependency_report.md`, THEN THE NuGet_Handler SHALL emit a diagnostic error with code `NR0002` containing the target file path and the underlying I/O error message, and SHALL continue pipeline execution without writing the report file.
+6. WHEN no NuGet packages are resolved for a project, THE NuGet_Handler SHALL set
+   `Dart_Package.DependencyReportContent` to `null`; the Result_Collector will not write a
+   `dependency_report.md` file for that package.
 
 ---
 

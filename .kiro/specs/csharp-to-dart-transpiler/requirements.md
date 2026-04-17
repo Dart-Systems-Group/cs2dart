@@ -77,8 +77,32 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
 - Dart package (`pubspec.yaml`, `lib/`, `test/`)
 - Generated Dart source files
 - Mapping reports (C# → Dart)
-- Diagnostics and warnings
+- `TranspilerResult`: a structured result object containing the list of generated file paths, a `Diagnostic` list (see §5.1), and a boolean `Success` flag (true when no `Error`-severity diagnostics are present)
 - Optional: Dart extension libraries for .NET‑like APIs
+
+### 5.1 Diagnostic schema
+
+Every component in the transpiler pipeline emits diagnostics using a shared `Diagnostic` record with the following fields:
+
+| Field      | Type                          | Required | Description                                              |
+|------------|-------------------------------|----------|----------------------------------------------------------|
+| `Severity` | `Error` \| `Warning` \| `Info` | Yes      | Impact level of the diagnostic                           |
+| `Code`     | string (`<prefix><4-digits>`) | Yes      | Stable, unique code. Prefix is component-reserved (see below) |
+| `Message`  | string                        | Yes      | Human-readable description of the issue                  |
+| `Source`   | string (file path)            | No       | Path to the file where the issue originates              |
+| `Location` | `{ Line: int, Column: int }`  | No       | Line and column within `Source`                          |
+
+**Reserved diagnostic code prefixes:**
+
+| Prefix | Component            | Range           |
+|--------|----------------------|-----------------|
+| `PL`   | Project_Loader       | `PL0001–PL9999` |
+| `IR`   | IR_Builder           | `IR0001–IR9999` |
+| `CG`   | Dart code generator  | `CG0001–CG9999` |
+| `NR`   | NuGet dependency handler | `NR0001–NR9999` |
+| `VA`   | Validation & analysis | `VA0001–VA9999` |
+
+No two components SHALL share a prefix. Roslyn compiler diagnostics are passed through with their original `CS`-prefixed codes and are not renumbered.
 
 ---
 
@@ -139,13 +163,19 @@ The transpiler prioritizes semantic fidelity, type safety, and idiomatic Dart ou
 ## 8. Configuration model
 
 ### Transpiler config file (`transpiler.yaml`)
-- Library mappings
-- Naming conventions
-- Nullability rules
-- Async behavior
-- LINQ lowering strategy
-- NuGet mapping overrides
-- Experimental feature toggles
+
+The `transpiler.yaml` file is parsed by the `Project_Loader` into a `Mapping_Config` object that is threaded through the entire pipeline. All components read their settings from this object rather than from the file directly. Supported top-level keys:
+
+| Key                  | Type              | Default               | Description                                              |
+|----------------------|-------------------|-----------------------|----------------------------------------------------------|
+| `sdk_path`           | string            | auto-detected         | Explicit path to the .NET SDK reference assemblies       |
+| `nuget_feeds`        | list of URLs      | `[nuget.org]`         | NuGet feeds queried in order before falling back to nuget.org |
+| `package_mappings`   | map string→string | `{}`                  | NuGet package name → Dart package name overrides         |
+| `linq_strategy`      | enum              | `preserve_functional` | `lower_to_loops` or `preserve_functional`                |
+| `naming_conventions` | object            | Dart defaults         | Controls identifier casing (PascalCase, camelCase, etc.) |
+| `nullability`        | object            | enabled               | Controls nullable reference type handling                |
+| `async_behavior`     | object            | standard              | Controls async/await mapping strategy                    |
+| `experimental`       | map string→bool   | `{}`                  | Feature-flag toggles for in-progress features            |
 
 ---
 

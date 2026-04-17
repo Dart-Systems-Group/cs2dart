@@ -27,6 +27,11 @@ without any further knowledge of C# syntax or Roslyn APIs.
 - **IR_Validator**: The component that checks structural and semantic invariants on a completed IR tree.
 - **Semantic_Fidelity**: The guarantee that the IR preserves the observable behavior of the source C# program.
 - **Determinism**: The guarantee that the same Roslyn_Model input always produces the same IR output.
+- **Diagnostic**: A pipeline-wide structured record. Every `Diagnostic` contains: `Severity` (one of `Error`, `Warning`, `Info`), `Code` (string in format `<prefix><4-digit-number>`), `Message` (human-readable string), optional `Source` (file path), and optional `Location` (line and column). The IR_Builder uses the reserved prefix `IR` (codes `IR0001`–`IR9999`).
+- **Load_Result**: The output of the `Project_Loader` consumed by the IR_Builder. Contains `Projects` (ordered list of `Project_Entry` items in topological order), `DependencyGraph`, `Diagnostics`, `Success`, and `Config`. Full schema is defined in the Project_Loader specification.
+- **Project_Entry**: A record within `Load_Result` representing one loaded project. Carries `ProjectPath`, `ProjectName`, `TargetFramework`, `OutputKind`, `LangVersion`, `NullableEnabled`, `Compilation`, `PackageReferences`, and `Diagnostics`. Full schema is defined in the Project_Loader specification.
+- **IR_Build_Result**: The output of the IR_Builder. Contains `Units` (list of `IrCompilationUnit`, one per `Project_Entry`), `Diagnostics` (aggregated `IR`-prefixed diagnostics), and `Success` (true when no `Error`-severity diagnostics are present).
+- **Mapping_Config**: The configuration object parsed from `transpiler.yaml` by the `Project_Loader` and passed into the pipeline via `Load_Result.Config`. The `linq_strategy` field (one of `lower_to_loops` or `preserve_functional`) controls how the IR_Builder handles LINQ expressions. The full schema is defined in the Project_Loader specification.
 
 ---
 
@@ -132,9 +137,10 @@ idiomatic Dart collection operations without understanding LINQ semantics.
 
 1. THE IR_Builder SHALL lower LINQ query syntax (e.g., `from x in xs where ... select ...`) to equivalent LINQ method-chain form before emitting IR nodes.
 2. THE IR_Builder SHALL represent each LINQ method call (`Where`, `Select`, `OrderBy`, `GroupBy`, `Join`, `Aggregate`, etc.) as an `InvocationExpression` IR node with the method resolved to its `System.Linq.Enumerable` or `System.Linq.Queryable` IR_Symbol.
-3. WHERE the transpiler configuration specifies `linq_strategy: lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
-4. WHERE the transpiler configuration specifies `linq_strategy: preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
-5. THE IR_Builder SHALL attach the element IR_Type and result IR_Type to every LINQ `InvocationExpression` node.
+3. WHERE `Load_Result.Config.linq_strategy` is `lower_to_loops`, THE IR_Builder SHALL lower LINQ chains to equivalent `ForEachStatement` and `LocalDeclaration` IR nodes.
+4. WHERE `Load_Result.Config.linq_strategy` is `preserve_functional`, THE IR_Builder SHALL preserve LINQ method-chain `InvocationExpression` nodes for the Dart code generator to map to Dart collection methods.
+5. WHEN `Load_Result.Config` is a default instance or `linq_strategy` is absent, THE IR_Builder SHALL default to `preserve_functional` behaviour.
+6. THE IR_Builder SHALL attach the element IR_Type and result IR_Type to every LINQ `InvocationExpression` node.
 
 ---
 
@@ -185,19 +191,22 @@ fully represented in the IR, so that I can emit correct Dart generic bounds.
 
 ---
 
-### Requirement 10: Roslyn Frontend Integration Contract
+### Requirement 10: Load_Result Integration Contract
 
-**User Story:** As a pipeline integrator, I want a well-defined input contract for the IR_Builder,
-so that the Roslyn frontend and the IR stage can evolve independently.
+**User Story:** As a pipeline integrator, I want a well-defined input and output contract for the IR_Builder,
+so that the Project_Loader and the IR stage can evolve independently.
 
 #### Acceptance Criteria
 
-1. THE IR_Builder SHALL accept as input a Roslyn `Compilation` object that has been fully bound (no unresolved references) and a list of `SyntaxTree` objects belonging to that compilation.
-2. THE IR_Builder SHALL not invoke Roslyn APIs that trigger re-parsing or re-binding; it SHALL read only from the already-computed `SemanticModel`.
-3. THE IR_Builder SHALL process each `SyntaxTree` in a deterministic order (alphabetical by file path) to ensure Determinism.
-4. WHEN the Roslyn `SemanticModel` reports binding errors for a node, THE IR_Builder SHALL emit an `UnresolvedSymbol` or `UnsupportedNode` placeholder and SHALL continue processing remaining nodes rather than aborting.
-5. THE IR_Builder SHALL expose a single public entry point: `IrCompilationUnit Build(Compilation compilation)` (or language-equivalent), with no mutable global state.
-6. THE IR_Builder SHALL complete processing of a single `SyntaxTree` without retaining references to Roslyn objects after that tree's IR subtree is emitted, to allow incremental memory release.
+1. THE IR_Builder SHALL accept a `Load_Result` as its sole input and SHALL read `Load_Result.Config` to obtain the `Mapping_Config` for the run; it SHALL NOT accept a raw `Compilation` or `Mapping_Config` as separate top-level arguments.
+2. THE IR_Builder SHALL iterate `Load_Result.Projects` in the order provided (topological, leaf-first) and produce one `IrCompilationUnit` per `Project_Entry`, collecting them into `IR_Build_Result.Units` in the same order.
+3. FOR EACH `Project_Entry`, THE IR_Builder SHALL read `Project_Entry.OutputKind`, `Project_Entry.TargetFramework`, `Project_Entry.LangVersion`, and `Project_Entry.NullableEnabled` and record them as metadata on the corresponding `IrCompilationUnit` so that the Dart code generator does not need to re-inspect the Roslyn `Compilation`.
+4. THE IR_Builder SHALL read `Project_Entry.PackageReferences` and attach the list to the `IrCompilationUnit` so that the NuGet dependency handler can map packages to Dart equivalents without accessing the `Compilation` directly.
+5. THE IR_Builder SHALL not invoke Roslyn APIs that trigger re-parsing or re-binding; it SHALL read only from the already-computed `SemanticModel` within each `Project_Entry.Compilation`.
+6. THE IR_Builder SHALL process each `SyntaxTree` within a `Project_Entry.Compilation` in deterministic order (alphabetical by file path) to ensure Determinism.
+7. WHEN the Roslyn `SemanticModel` reports binding errors for a node, THE IR_Builder SHALL emit an `UnresolvedSymbol` or `UnsupportedNode` placeholder and SHALL continue processing remaining nodes rather than aborting.
+8. THE IR_Builder SHALL expose a single public entry point: `IR_Build_Result Build(Load_Result loadResult)` (or language-equivalent), with no mutable global state.
+9. THE IR_Builder SHALL complete processing of a single `SyntaxTree` without retaining references to Roslyn objects after that tree's IR subtree is emitted, to allow incremental memory release.
 
 ---
 
@@ -278,8 +287,8 @@ be represented in the IR, so that I know exactly what to fix or what to expect i
 
 #### Acceptance Criteria
 
-1. THE IR_Builder SHALL emit a structured diagnostic for every `UnsupportedNode` and `UnresolvedSymbol` it produces.
-2. EACH diagnostic SHALL contain: a severity level (Error, Warning, Info), a stable diagnostic code, a human-readable message, and the source file path and line/column span.
+1. THE IR_Builder SHALL emit a structured `Diagnostic` conforming to the pipeline-wide schema for every `UnsupportedNode` and `UnresolvedSymbol` it produces.
+2. THE IR_Builder SHALL assign diagnostic codes in the range `IR0001`–`IR9999`; no other pipeline component SHALL use the `IR` prefix.
 3. THE IR_Builder SHALL not emit duplicate diagnostics for the same source location and diagnostic code.
 4. THE IR_Builder SHALL aggregate all diagnostics and return them alongside the IR tree rather than writing to standard output or throwing exceptions.
 5. WHEN all diagnostics have severity Warning or Info (no Errors), THE IR_Builder SHALL return a complete IR tree alongside the diagnostics.

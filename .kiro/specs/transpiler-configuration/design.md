@@ -84,6 +84,15 @@ abstract interface class IConfigService {
   String? get sdkPath;
   List<String> get nugetFeedUrls;
 
+  // NuGet advanced configuration
+  Map<String, dynamic> get nugetMappings;
+  String? get nugetCachePath;
+  List<String> get tier2SourcePaths;
+  List<String> get excludePackages;
+  Map<String, int> get forceTier;
+  bool get transpileTier2;
+  String? get mappingRegistryPath;
+
   // Type mappings
   Map<String, String> get libraryMappings;
   Map<String, StructMappingOverride> get structMappings;
@@ -214,6 +223,13 @@ final class ConfigObject {
   final Map<String, String> packageMappings;
   final String? sdkPath;
   final List<String> nugetFeedUrls;
+  final Map<String, dynamic> nugetMappings;
+  final String? nugetCachePath;
+  final List<String> tier2SourcePaths;
+  final List<String> excludePackages;
+  final Map<String, int> forceTier;
+  final bool transpileTier2;
+  final String? mappingRegistryPath;
   final Map<String, String> libraryMappings;
   final Map<String, StructMappingOverride> structMappings;
   final NamingConventions namingConventions;
@@ -233,6 +249,13 @@ final class ConfigObject {
     this.packageMappings = const {},
     this.sdkPath,
     this.nugetFeedUrls = const ['https://api.nuget.org/v3/index.json'],
+    this.nugetMappings = const {},
+    this.nugetCachePath,
+    this.tier2SourcePaths = const [],
+    this.excludePackages = const [],
+    this.forceTier = const {},
+    this.transpileTier2 = true,
+    this.mappingRegistryPath,
     this.libraryMappings = const {},
     this.structMappings = const {},
     this.namingConventions = const NamingConventions(),
@@ -295,10 +318,12 @@ final class NullabilityConfig {
 final class AsyncConfig {
   final bool omitConfigureAwait;    // default: false
   final bool mapValueTaskToFuture;  // default: true
+  final bool wrapUnawaitedVoid;     // default: true
 
   const AsyncConfig({
     this.omitConfigureAwait = false,
     this.mapValueTaskToFuture = true,
+    this.wrapUnawaitedVoid = true,
   });
 
   @override bool operator ==(Object other) { ... }

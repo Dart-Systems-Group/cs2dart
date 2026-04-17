@@ -146,7 +146,7 @@ tested, so that errors and warnings are always structured, stable, and actionabl
    and only if the diagnostics list contains no `Error`-severity entry.
 4. Diagnostic code ranges SHALL be tested to ensure no two modules emit diagnostics with the same
    prefix: `PL` (Project_Loader), `IR` (IR_Builder), `CG` (Dart_Generator), `NR` (NuGet_Handler),
-   `VA` (Validation), `CFG` (Config_Service).
+   `VA` (Validation), `CFG` (Config_Service), `RC` (Result_Collector), `OR` (Pipeline_Orchestrator).
 5. EVERY module SHALL have a test asserting that diagnostics are aggregated into the result object
    and NOT written to standard output or thrown as exceptions.
 
@@ -242,8 +242,9 @@ correctness for every documented invariant.
    `Success` flag correctness (Project_Loader Requirement 7.3).
 3. THE IR_Builder test suite SHALL include PBT properties for: declaration count preservation
    (IR Requirement 16.1), determinism (IR Requirement 16.2), round-trip (IR Requirement 16.3),
-   well-formedness (IR Requirement 16.4), return statement preservation (IR Requirement 16.5), and
-   type fidelity (IR Requirement 16.6).
+   well-formedness (IR Requirement 16.4), return statement preservation (IR Requirement 16.5),
+   type fidelity (IR Requirement 16.6), constant fidelity (IR Requirement 16.7), and partial
+   merge attribute count preservation (IR Requirement 16.8).
 4. THE Dart_Generator test suite SHALL include PBT properties for: determinism (Dart_Generator
    Requirement 14.1), file count preservation (Dart_Generator Requirement 14.2), declaration count
    preservation (Dart_Generator Requirement 14.3), async fidelity (Dart_Generator Requirement 14.4),

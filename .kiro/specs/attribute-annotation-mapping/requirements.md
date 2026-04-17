@@ -128,14 +128,18 @@ their Dart equivalents without any configuration, so that common patterns like `
 
    | C# Attribute (fully qualified) | Dart Annotation | Notes |
    |---|---|---|
-   | `System.ObsoleteAttribute` | `@Deprecated('<message>')` | `message` from first positional arg; default `'Deprecated'` if absent |
+   | `System.ObsoleteAttribute` | `@Deprecated('<message>')` or `@Deprecated('<message> (REMOVED — do not use)')` | `message` from first positional arg; default `'Deprecated'` if absent. When second positional arg (`error`) is `true`, append ` (REMOVED — do not use)` to the message and emit a `CG` `Warning` diagnostic. |
    | `System.SerializableAttribute` | `// UNMAPPED ATTRIBUTE: [Serializable]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.FlagsAttribute` | `// UNMAPPED ATTRIBUTE: [Flags]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.ComponentModel.DataAnnotations.RequiredAttribute` | `// UNMAPPED ATTRIBUTE: [Required]` + `CG` `Warning` | Requires `package:freezed` or user mapping; handled here because DataAnnotations is a BCL namespace with no separate NuGet package tier entry |
 
 2. WHEN a Known_Mapping requires a Dart package import (e.g., `json_annotation`), THE `Attribute_Mapper` SHALL add the corresponding `import` directive to the generated file and SHALL add the package to `pubspec.yaml` `dependencies` if not already present.
 3. THE built-in Known_Mapping table SHALL be versioned and documented; additions SHALL NOT be breaking changes.
-4. WHEN a Known_Mapping maps to `@Deprecated`, THE `Attribute_Mapper` SHALL use the first positional argument of the `Attribute_Node` as the deprecation message string; IF no positional argument is present, THE `Attribute_Mapper` SHALL emit `@Deprecated('Deprecated')`.
+4. WHEN a Known_Mapping maps to `@Deprecated`, THE `Attribute_Mapper` SHALL use the first positional argument of the `Attribute_Node` as the deprecation message string; IF no positional argument is present, THE `Attribute_Mapper` SHALL use the default message `'Deprecated'`.
+5. WHEN the second positional argument of `System.ObsoleteAttribute` (the `error` parameter) is present and evaluates to `true`, THE `Attribute_Mapper` SHALL:
+   (a) append the suffix ` (REMOVED — do not use)` to the deprecation message string before emitting `@Deprecated(...)`, producing e.g. `@Deprecated('Old API (REMOVED — do not use)')`;
+   (b) emit a `CG` `Warning` diagnostic carrying the `FullyQualifiedName`, the target declaration's source location, and a message stating that the member is marked for hard removal (`error = true`) and callers must stop using it immediately.
+   WHEN the second positional argument is absent or evaluates to `false`, THE `Attribute_Mapper` SHALL emit `@Deprecated(...)` with no suffix and no additional diagnostic beyond the standard mapping `CG` `Info` diagnostic (Requirement 10.6).
 
 ---
 
@@ -265,6 +269,8 @@ a wide range of C# attribute inputs.
 9. FOR ALL `FullyQualifiedName` values that appear in exactly one tier, no cross-tier collision diagnostic SHALL be present in `Gen_Result.Diagnostics` (no spurious collision diagnostic property).
 10. FOR ALL `Attribute_Node` instances with `Target = EnumMember`, the `Attribute_Mapper` SHALL emit the annotation or unmapped comment immediately before the corresponding enum value declaration, and SHALL NOT emit it on the enclosing enum type or any other declaration (enum member placement property).
 11. FOR ALL `Frontend_Unit` inputs containing a `partial` class whose parts collectively carry `N` total `Attribute_Node` instances across all parts (on the class itself or on any member), the merged `Class` IR_Node and its member IR_Nodes SHALL together carry exactly `N` `Attribute_Node` instances — no attribute application from any partial part SHALL be dropped (partial merge attribute count preservation property).
+12. FOR ALL `Attribute_Node` instances for `System.ObsoleteAttribute` where the second positional argument is `true`, the generated Dart output SHALL contain `@Deprecated(` with a message string ending in ` (REMOVED — do not use)')` and `Gen_Result.Diagnostics` SHALL contain exactly one `CG` `Warning` diagnostic for that declaration site (obsolete-error-signal property).
+13. FOR ALL `Attribute_Node` instances for `System.ObsoleteAttribute` where the second positional argument is absent or `false`, the generated Dart output SHALL contain `@Deprecated(` with no ` (REMOVED — do not use)` suffix and no additional `CG` `Warning` diagnostic beyond the standard mapping `CG` `Info` (obsolete-no-error-signal property).
 
 ---
 

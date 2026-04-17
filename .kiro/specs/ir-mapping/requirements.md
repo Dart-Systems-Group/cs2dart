@@ -157,6 +157,8 @@ represented faithfully in the IR, so that I can emit correct Dart `async`/`await
 3. THE IR_Builder SHALL represent `Task<T>` return types as `GenericType` nodes with base name `Task` and type argument `T`, preserving the distinction between `Task`, `Task<T>`, and `ValueTask<T>`.
 4. THE IR_Builder SHALL represent `async IAsyncEnumerable<T>` methods with `IsAsync = true`, `IsIterator = true`, and return IR_Type `IAsyncEnumerable<T>`.
 5. THE IR_Builder SHALL represent `ConfigureAwait(false)` calls as `AwaitExpression` nodes with a `ConfigureAwait = false` flag rather than as a generic `InvocationExpression`.
+6. THE IR_Builder SHALL represent an explicit discard of a `Task`-returning call (i.e., `_ = SomeAsync()`) as an `InvocationExpression` node with `IsFireAndForget = true`; the enclosing `AssignmentExpression` to the discard identifier SHALL NOT be emitted as a separate IR node.
+7. WHEN a `Task`-returning `InvocationExpression` appears as a bare expression statement with no `await`, no assignment, and no `#pragma warning disable CS4014` suppression active at that source location, THE IR_Builder SHALL emit the `InvocationExpression` with `IsFireAndForget = false` and SHALL attach an `IR` `Warning` diagnostic identifying the unawaited call site.
 
 ---
 
@@ -273,6 +275,7 @@ errors early.
 1. THE IR_Validator SHALL verify that every Expression node carries a non-null IR_Type.
 2. THE IR_Validator SHALL verify that every Identifier and reference node carries a non-null IR_Symbol.
 3. THE IR_Validator SHALL verify that every `Method` node with `IsAsync = true` has a return IR_Type of `Task`, `Task<T>`, `ValueTask`, `ValueTask<T>`, or `IAsyncEnumerable<T>`.
+3a. THE IR_Validator SHALL verify that every `InvocationExpression` node with `IsFireAndForget = true` has a return IR_Type of `Task`, `Task<T>`, `ValueTask`, or `ValueTask<T>` (fire-and-forget only applies to Task-returning calls).
 4. THE IR_Validator SHALL verify that every `Class` node that declares `IsAbstract = true` does not also declare `IsSealed = true`.
 5. THE IR_Validator SHALL verify that every `TypeParameter` node referenced in a `GenericType` is declared in the enclosing generic declaration's type parameter list.
 6. THE IR_Validator SHALL verify that every `CatchClause` node within a `TryCatchStatement` that has a `WhenExpression` has that expression typed as `bool`.

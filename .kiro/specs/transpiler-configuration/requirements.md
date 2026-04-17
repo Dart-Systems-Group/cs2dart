@@ -98,14 +98,16 @@ This document specifies the requirements for the **Configuration Service** of th
 
 ### Requirement 5: Async Configuration
 
-**User Story:** As a developer, I want to configure how C# async patterns are mapped to Dart, so that I can control `ConfigureAwait` behavior and `ValueTask` handling.
+**User Story:** As a developer, I want to configure how C# async patterns are mapped to Dart, so that I can control `ConfigureAwait` behavior, `ValueTask` handling, and unawaited-call wrapping.
 
 #### Acceptance Criteria
 
 1. THE Config_Service SHALL expose an `AsyncConfig` value object with the following fields:
-   - `bool omitConfigureAwait` — when true, `ConfigureAwait(false)` calls are silently dropped; default: false
-   - `bool mapValueTaskToFuture` — when true, `ValueTask<T>` is mapped to `Future<T>`; default: true
-2. IF an unrecognized key appears under the `async_behavior` section, THE Config_Service SHALL emit a Config_Diagnostic of severity `Warning` and ignore the key.
+   - `bool omitConfigureAwait` — when true, `ConfigureAwait(false)` calls are silently dropped; default: `false`
+   - `bool mapValueTaskToFuture` — when true, `ValueTask<T>` is mapped to `Future<T>`; default: `true`
+   - `bool wrapUnawaitedVoid` — when true, `InvocationExpression` nodes with `IsFireAndForget = true` are emitted as `unawaited(...)` in Dart; when false, they are emitted as plain calls; default: `true`
+2. The `wrapUnawaitedVoid` field controls only calls that were explicitly marked as fire-and-forget in C# source (i.e., `IsFireAndForget = true` on the IR node, set by the IR_Builder for explicit-discard `_ = SomeAsync()` patterns or `#pragma warning disable CS4014`-suppressed call sites). It does NOT affect bare unawaited calls that carry no suppression signal.
+3. IF an unrecognized key appears under the `async_behavior` section, THE Config_Service SHALL emit a Config_Diagnostic of severity `Warning` and ignore the key.
 
 ---
 

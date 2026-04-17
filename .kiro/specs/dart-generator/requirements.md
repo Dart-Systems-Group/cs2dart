@@ -193,7 +193,9 @@ constructs, so that the generated code integrates naturally with Dart's event lo
 1. THE `Dart_Generator` SHALL emit every IR `Method` with `IsAsync = true` as a Dart `async` method with return type `Future<T>` where `T` is derived from the IR return type by unwrapping `Task<T>` or `ValueTask<T>`.
 2. THE `Dart_Generator` SHALL emit every IR `Method` with `IsAsync = true` and `IsIterator = true` as a Dart `async*` method with return type `Stream<T>`.
 3. THE `Dart_Generator` SHALL emit IR `AwaitExpression` nodes inside `async` methods as Dart `await` expressions.
-4. WHEN `Mapping_Config.async_behavior` specifies `fire_and_forget`, THE `Dart_Generator` SHALL emit `unawaited(...)` wrappers from `dart:async` around void async calls that are not awaited, and SHALL attach a `CG` `Info` diagnostic.
+4. WHEN an `InvocationExpression` IR node has `IsFireAndForget = true` AND `AsyncConfig.wrapUnawaitedVoid` is `true`, THE `Dart_Generator` SHALL emit `unawaited(...)` from `dart:async` around the call and SHALL attach a `CG` `Info` diagnostic identifying the fire-and-forget site.
+4a. WHEN an `InvocationExpression` IR node has `IsFireAndForget = true` AND `AsyncConfig.wrapUnawaitedVoid` is `false`, THE `Dart_Generator` SHALL emit the call as a plain expression statement without an `unawaited(...)` wrapper.
+4b. WHEN an `InvocationExpression` IR node has `IsFireAndForget = false` and its return IR_Type is `Task`, `Task<T>`, `ValueTask`, or `ValueTask<T>` and it appears as a bare expression statement (not awaited, not assigned), THE `Dart_Generator` SHALL emit the call as a plain expression statement and SHALL attach a `CG` `Warning` diagnostic identifying the unawaited call, noting that the original C# source did not suppress CS4014 at this site.
 5. THE `Dart_Generator` SHALL map `Task.WhenAll(...)` `InvocationExpression` nodes to `Future.wait([...])` and `Task.WhenAny(...)` to `Future.any([...])`.
 
 ---

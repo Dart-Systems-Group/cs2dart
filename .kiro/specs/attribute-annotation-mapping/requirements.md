@@ -133,7 +133,7 @@ their Dart equivalents without any configuration, so that common patterns like `
    | `System.FlagsAttribute` | `// UNMAPPED ATTRIBUTE: [Flags]` + `CG` `Info` | No Dart equivalent; info-level only |
    | `System.ComponentModel.DataAnnotations.RequiredAttribute` | `// UNMAPPED ATTRIBUTE: [Required]` + `CG` `Warning` | Requires `package:freezed` or user mapping; handled here because DataAnnotations is a BCL namespace with no separate NuGet package tier entry |
 
-2. WHEN a Known_Mapping requires a Dart package import (e.g., `json_annotation`), THE `Attribute_Mapper` SHALL add the corresponding `import` directive to the generated file and SHALL add the package to `pubspec.yaml` `dependencies` if not already present.
+2. WHEN a Known_Mapping requires a Dart package import (e.g., `json_annotation`), THE `Attribute_Mapper` SHALL add the corresponding `import` directive and package dependency following the idempotency rules in Requirement 13.
 3. THE built-in Known_Mapping table SHALL be versioned and documented; additions SHALL NOT be breaking changes.
 4. WHEN a Known_Mapping maps to `@Deprecated`, THE `Attribute_Mapper` SHALL use the first positional argument of the `Attribute_Node` as the deprecation message string; IF no positional argument is present, THE `Attribute_Mapper` SHALL use the default message `'Deprecated'`.
 5. WHEN the second positional argument of `System.ObsoleteAttribute` (the `error` parameter) is present and evaluates to `true`, THE `Attribute_Mapper` SHALL:
@@ -156,7 +156,7 @@ package mapping automatically brings its attribute mappings along.
 3. WHEN a Package_Mapping template string contains `{0}`, `{1}`, ... placeholders, THE `Attribute_Mapper` SHALL substitute them with the string representations of the `Attribute_Node.PositionalArguments` in order.
 4. WHEN a Package_Mapping template string contains `{<name>}` placeholders, THE `Attribute_Mapper` SHALL substitute them with the string representation of the matching `Attribute_Node.NamedArguments` entry.
 5. IF a placeholder references a positional or named argument that is absent from the `Attribute_Node`, THE `Attribute_Mapper` SHALL substitute an empty string and emit a `CG` `Warning` diagnostic identifying the missing argument.
-6. THE `Attribute_Mapper` SHALL add any Dart package imports required by Package_Mapping annotations to the generated file and `pubspec.yaml`, using the same mechanism as Known_Mappings (Requirement 4.2).
+6. THE `Attribute_Mapper` SHALL add any Dart package imports required by Package_Mapping annotations to the generated file and `pubspec.yaml`, following the idempotency rules in Requirement 13.
 
 ---
 
@@ -173,8 +173,8 @@ annotations without modifying the transpiler source.
 3. WHEN `attribute_mappings` is absent from `transpiler.yaml`, `IConfigService.attributeMappings` SHALL return an empty map.
 4. IF an `attribute_mappings` entry has a value that is not a string or a valid `AttributeMappingRule` object, THE Config_Service SHALL emit a `CFG` `Error` diagnostic identifying the offending key and halt pipeline initialization.
 5. THE `Attribute_Mapper` SHALL apply Custom_Mappings with higher priority than both Package_Mappings and Known_Mappings, allowing users to override built-in behavior.
-6. WHEN a Custom_Mapping `requiredImports` list is non-empty, THE `Attribute_Mapper` SHALL add those import directives to every generated file that emits the mapped annotation.
-7. WHEN a Custom_Mapping `requiredPackages` list is non-empty, THE `Attribute_Mapper` SHALL add those packages to `pubspec.yaml` `dependencies` with the specified version constraints.
+6. WHEN a Custom_Mapping `requiredImports` list is non-empty, THE `Attribute_Mapper` SHALL add those import directives to every generated file that emits the mapped annotation, following the idempotency rules in Requirement 13.
+7. WHEN a Custom_Mapping `requiredPackages` list is non-empty, THE `Attribute_Mapper` SHALL add those packages to `pubspec.yaml` `dependencies` with the specified version constraints, following the idempotency rules in Requirement 13.
 8. FOR ALL valid `transpiler.yaml` files, parsing then serializing the `attribute_mappings` section then parsing again SHALL produce a value-equal `attributeMappings` map (round-trip property).
 
 ---
@@ -288,3 +288,24 @@ silently dropped when a class is split across multiple files.
 4. WHEN a class has only a single (non-partial) declaration, THE IR_Builder SHALL attach its `Attribute_Node` list to the `Class` IR_Node exactly as specified by Requirement 1.2 and 1.3, with no change in behavior.
 5. WHEN a `partial` class has members that each appear in exactly one part (no member is split across parts), THE IR_Builder SHALL attach each member's `Attribute_Node` list to its IR_Node exactly as extracted by the Roslyn_Frontend, with no change in behavior.
 6. THE IR_Builder SHALL NOT deduplicate `Attribute_Node` instances during the partial merge, because C# permits multiple applications of the same attribute type when `AllowMultiple = true`, and the IR must faithfully represent every attribute application as written in source.
+
+---
+
+### Requirement 13: Import and Dependency Idempotency
+
+**User Story:** As a Dart developer, I want the transpiler to emit each `import` directive and each
+`pubspec.yaml` dependency entry exactly once per generated file, regardless of how many attributes
+— from any combination of tiers — require the same package, so that the generated code compiles
+without duplicate-import errors and `pubspec.yaml` remains well-formed.
+
+> **Authoritative rule:** This requirement is the single source of truth for import/dependency
+> idempotency. Requirements 4.2, 5.6, 6.6, and 6.7 each delegate to this requirement rather than
+> restating the rule locally.
+
+#### Acceptance Criteria
+
+1. THE `Attribute_Mapper` SHALL maintain a per-file import accumulator and a per-run `pubspec.yaml` dependency accumulator. Before writing any `import` directive or `pubspec.yaml` entry, it SHALL check the corresponding accumulator; it SHALL write the entry only if it is not already present.
+2. WHEN two or more `Attribute_Node` instances in the same generated file — originating from any combination of Known_Mapping, Package_Mapping, and Custom_Mapping tiers — require the same Dart import URI, THE `Attribute_Mapper` SHALL emit that `import` directive exactly once in the generated file.
+3. WHEN two or more `Attribute_Node` instances across any combination of tiers require the same pub package name in `pubspec.yaml`, THE `Attribute_Mapper` SHALL add that package to `pubspec.yaml` `dependencies` exactly once. WHEN the same package is required by entries from different tiers with different version constraints, THE `Attribute_Mapper` SHALL use the most-specific (highest lower-bound) constraint and emit a `CG` `Warning` diagnostic identifying the conflict, the competing constraints, and the chosen constraint.
+4. THE idempotency guarantee SHALL hold across all three tiers simultaneously: a single pipeline run that processes attributes from Known_Mapping, Package_Mapping, and Custom_Mapping tiers SHALL produce the same set of `import` directives and `pubspec.yaml` entries as a run that processes only one tier requiring the same packages.
+5. FOR ALL valid IR trees, running THE `Attribute_Mapper` twice on the same IR tree SHALL produce generated files with identical `import` directive sets and an identical `pubspec.yaml` `dependencies` section (idempotency property).

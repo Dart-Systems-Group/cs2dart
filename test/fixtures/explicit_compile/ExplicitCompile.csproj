@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Foo.cs" />
+    <Compile Include="Bar.cs" />
+    <Compile Remove="Excluded.cs" />
+  </ItemGroup>
+</Project>

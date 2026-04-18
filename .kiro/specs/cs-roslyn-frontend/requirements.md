@@ -469,6 +469,45 @@ size of one file rather than the entire solution.
 
 ---
 
+### Requirement 16: .NET Worker Process (`cs2dart_roslyn_worker`)
+
+**User Story:** As a pipeline integrator, I want the Roslyn work to be performed by a dedicated
+.NET console process that is compiled and managed automatically, so that the Dart side never
+needs a Roslyn dependency and the worker is always available at runtime.
+
+#### Acceptance Criteria
+
+1. THE `cs2dart_roslyn_worker` SHALL be a .NET 8 console application located at
+   `cs2dart_roslyn_worker/` in the repository root, with a `cs2dart_roslyn_worker.csproj` that
+   targets `net8.0` and references `Microsoft.CodeAnalysis.CSharp`.
+2. THE worker SHALL read a single `InteropRequest` JSON payload from `stdin` (preceded by a
+   4-byte little-endian length prefix), process it, write a single `FrontendResult` JSON payload
+   to `stdout` (preceded by a 4-byte little-endian length prefix), then exit with code `0`.
+3. THE worker SHALL write all diagnostic and error output exclusively to `stderr`; it SHALL NOT
+   write any non-JSON content to `stdout`.
+4. THE worker SHALL exit with a non-zero exit code when it encounters a fatal error (e.g.,
+   malformed request JSON, unhandled exception); it SHALL write a human-readable error message
+   to `stderr` before exiting.
+5. THE Dart build step SHALL invoke `dotnet publish -c Release -r <rid> --self-contained true`
+   on the worker project to produce a self-contained native binary, placing the output under
+   `build/roslyn_worker/`. This step SHALL run automatically as part of `dart run build_runner build`.
+6. THE `PipeInteropBridge` SHALL locate the worker binary at
+   `build/roslyn_worker/cs2dart_roslyn_worker[.exe]` relative to the Dart package root, and
+   SHALL throw a descriptive `InteropException` if the binary is not found.
+7. THE `PipeInteropBridge` SHALL maintain a pool of worker processes (default pool size: number
+   of logical CPU cores, minimum 1, maximum 8). Each worker process in the pool handles one
+   request at a time. The pool is created lazily on the first `invoke()` call and all processes
+   are terminated on `dispose()`.
+8. WHEN `invoke()` is called and all pool workers are busy, THE `PipeInteropBridge` SHALL queue
+   the request and dispatch it to the next worker that becomes free.
+9. WHEN a worker process exits unexpectedly (non-zero exit code or stdout closed prematurely),
+   THE `PipeInteropBridge` SHALL remove it from the pool, capture its `stderr` output, wrap it
+   in an `InteropException`, and spawn a replacement worker to maintain pool size.
+10. THE worker process SHALL be stateless between requests; each `invoke()` call sends a complete
+    self-contained `InteropRequest` and receives a complete `FrontendResult` response.
+
+---
+
 ### Requirement 15: Correctness Properties for Testing
 
 **User Story:** As a transpiler test engineer, I want well-defined correctness properties for the

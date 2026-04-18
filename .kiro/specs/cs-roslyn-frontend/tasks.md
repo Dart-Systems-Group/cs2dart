@@ -281,7 +281,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
       `IsOut`/`IsIn` flags
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [-] 12. Write unit tests for unsupported construct handling
+- [x] 12. Write unit tests for unsupported construct handling
   - Test `unsafe` block produces `UnsupportedAnnotation` and emits `RF0005` Error
   - Test `fixed` statement produces `UnsupportedAnnotation` and emits `RF0005` Error
   - Test `stackalloc` produces `UnsupportedAnnotation` and emits `RF0005` Error
@@ -292,7 +292,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     semantically incomplete
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
 
-- [~] 13. Write unit tests for diagnostics and error reporting
+- [x] 13. Write unit tests for diagnostics and error reporting
   - Test `RF`-prefixed diagnostic codes are in range `RF0001`–`RF9999`
   - Test duplicate diagnostics (same source location and code) are suppressed with `RF0012`
   - Test Roslyn `CS`-prefixed compiler diagnostics are propagated unchanged into
@@ -302,7 +302,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Test `RF0011` Warning is emitted for each project skipped due to upstream Error diagnostics
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
 
-- [~] 14. Checkpoint — Ensure all tests pass
+- [x] 14. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 15. Write integration tests
@@ -349,7 +349,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Tag `@Tags(['integration'])`
     - _Requirements: 9.6_
 
-- [~] 16. Wire `RoslynFrontend` into the pipeline bootstrap
+- [x] 16. Wire `RoslynFrontend` into the pipeline bootstrap
   - Register `RoslynFrontend` (with `IInteropBridge` and `FrontendResultAssembler` dependencies)
     in `lib/src/pipeline_bootstrap.dart` so the `Orchestrator` can resolve `IRoslynFrontend`
   - Update `lib/src/orchestrator/interfaces/i_roslyn_frontend.dart` to re-export the full
@@ -357,9 +357,108 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Ensure `IConfigService` is passed through to `RoslynFrontend.process()` at call sites
   - _Requirements: 1.1, 1.3, 13.1_
 
-- [~] 17. Final checkpoint — Ensure all tests pass
+- [x] 17. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass (excluding `@Tags(['integration'])` unless .NET 8 SDK and
     `cs2dart_roslyn_worker` binary are available), ask the user if questions arise.
+
+- [ ] 18. Create the `cs2dart_roslyn_worker` .NET project scaffold
+  - Create `cs2dart_roslyn_worker/cs2dart_roslyn_worker.csproj` targeting `net8.0` with a
+    `PackageReference` to `Microsoft.CodeAnalysis.CSharp` version `4.*`
+  - Create `cs2dart_roslyn_worker/Program.cs` with the stdin/stdout request loop:
+    - Read 4-byte little-endian length prefix from stdin
+    - Read exactly N bytes of UTF-8 JSON
+    - Deserialize to `InteropRequest` via `InteropRequestDeserializer`
+    - Invoke `WorkerRequestHandler.Handle(request)`
+    - Serialize `FrontendResult` via `FrontendResultSerializer`
+    - Write 4-byte little-endian length prefix + UTF-8 JSON bytes to stdout, then flush
+    - Catch all top-level exceptions, write to stderr, exit with non-zero code
+  - Create `cs2dart_roslyn_worker/WorkerRequestHandler.cs` that iterates `request.Projects`
+    and invokes `ProjectProcessor` for each, collecting `FrontendUnit` results
+  - Create stub `cs2dart_roslyn_worker/ProjectProcessor.cs` that returns an empty
+    `FrontendUnit` (full normalization pipeline is implemented in subsequent tasks)
+  - Create `cs2dart_roslyn_worker/Serialization/InteropRequestDeserializer.cs` using
+    `System.Text.Json` to deserialize the `InteropRequest` JSON payload
+  - Create `cs2dart_roslyn_worker/Serialization/FrontendResultSerializer.cs` using
+    `System.Text.Json` to serialize the `FrontendResult` to JSON
+  - Create `cs2dart_roslyn_worker/Models/` with C# mirror classes for all plain-data types
+    that cross the interop boundary (`InteropRequest`, `ProjectEntryRequest`, `FrontendConfig`,
+    `FrontendResult`, `FrontendUnit`, `Diagnostic`, etc.)
+  - Verify the project builds with `dotnet build`
+  - _Requirements: 16.1, 16.2, 16.3, 16.4_
+
+- [ ] 19. Implement the Dart build step for `dotnet publish`
+  - Create `tool/build/roslyn_worker_builder.dart` implementing a `build_runner` `Builder`
+    that invokes:
+    ```
+    dotnet publish cs2dart_roslyn_worker/cs2dart_roslyn_worker.csproj \
+      -c Release -r <rid> --self-contained true -o build/roslyn_worker/
+    ```
+    where `<rid>` is derived from `Platform.operatingSystem` at build time
+    (`linux-x64`, `osx-x64`/`osx-arm64`, `win-x64`)
+  - Declare `cs2dart_roslyn_worker/**` as builder inputs and
+    `build/roslyn_worker/cs2dart_roslyn_worker[.exe]` as the output asset
+  - Register the builder in `build.yaml` so `dart run build_runner build` triggers it
+  - _Requirements: 16.5_
+
+  - [ ]* 19.1 Write a test that verifies the builder produces the binary
+    - Run `dart run build_runner build` in a temp directory and assert the binary exists
+    - Tag `@Tags(['integration'])`
+    - _Requirements: 16.5_
+
+- [ ] 20. Implement `WorkerBinaryLocator`
+  - Create `lib/src/roslyn_frontend/worker_binary_locator.dart`
+  - Implement `WorkerBinaryLocator.resolve({String? override})`:
+    - If `override` is non-null and the file exists, return it
+    - Otherwise resolve `<packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe]`
+      (append `.exe` on Windows via `Platform.isWindows`)
+    - Throw `InteropException` with a descriptive message if the binary does not exist
+  - _Requirements: 16.6_
+
+  - [ ]* 20.1 Write unit tests for `WorkerBinaryLocator`
+    - Test that a valid override path is returned as-is
+    - Test that a missing binary throws `InteropException` with a helpful message
+    - Test that `.exe` is appended on Windows (mock `Platform.isWindows`)
+    - _Requirements: 16.6_
+
+- [ ] 21. Implement `PipeInteropBridge`
+  - Replace the stub in `lib/src/roslyn_frontend/pipe_interop_bridge.dart` with the full
+    implementation:
+  - Constructor accepts `int? poolSize` (default: `Platform.numberOfProcessors`, clamped 1–8)
+    and `String? workerBinaryPath` (resolved via `WorkerBinaryLocator` if null)
+  - Lazy pool initialization on first `invoke()` call:
+    - Spawn `poolSize` worker processes via `Process.start(workerBinaryPath, [])` with
+      `stdin` and `stdout` piped; redirect `stderr` to a `StringBuffer` per worker
+    - Track each worker as free or busy
+  - `invoke(InteropRequest request)`:
+    - Serialize `request` to UTF-8 JSON via `InteropRequestSerializer.toJson`
+    - Acquire a free worker (queue if all busy)
+    - Write 4-byte LE length prefix + JSON bytes to the worker's stdin
+    - Read 4-byte LE length prefix from the worker's stdout
+    - Read exactly N bytes and deserialize via `FrontendResultDeserializer.fromJson`
+    - Mark the worker free; dispatch next queued request if any
+    - On worker exit or stdout EOF before response: capture stderr, throw `InteropException`,
+      spawn a replacement worker
+  - `dispose()`:
+    - Close stdin of all workers (signals EOF → worker exits cleanly)
+    - Wait for all worker processes to exit with a timeout
+    - Cancel all queued requests with `InteropException('Bridge disposed')`
+  - _Requirements: 16.6, 16.7, 16.8, 16.9, 16.10_
+
+  - [ ]* 21.1 Write unit tests for `PipeInteropBridge`
+    - Test that `poolSize` workers are spawned on first `invoke()` call
+    - Test that concurrent `invoke()` calls beyond pool size are queued and dispatched in order
+    - Test that a worker crash triggers `InteropException` and a replacement is spawned
+    - Test that `dispose()` terminates all workers and rejects queued requests
+    - Test that `WorkerBinaryLocator` is called when no explicit path is provided
+    - Use a fake worker binary (a simple echo script) for these tests
+    - Tag `@Tags(['integration'])` for tests that spawn real processes
+    - _Requirements: 16.7, 16.8, 16.9, 16.10_
+
+- [ ] 22. Checkpoint — Ensure all tests pass
+  - Run `dart test --exclude-tags integration` and confirm all non-integration tests pass
+  - Run `dart run build_runner build` and confirm the worker binary is produced
+  - Run `dart test --tags integration` if .NET 8 SDK is available
+  - Ask the user if questions arise
 
 ## Notes
 
@@ -372,6 +471,12 @@ the Dart side only handles serialization, deserialization, and post-processing a
   are excluded from the default test run via `@Tags(['integration'])`
 - The `FakeInteropBridge` (task 5) is the primary test double for all Dart-side tests; it
   avoids spawning a real .NET process
-- The .NET worker (`cs2dart_roslyn_worker`) implementation is out of scope for this spec; the
-  `IInteropBridge` abstraction allows the Dart side to be fully tested independently
+- Tasks 18–22 implement the previously out-of-scope .NET worker and `PipeInteropBridge`:
+  - Task 18 creates the `cs2dart_roslyn_worker` .NET project with the stdin/stdout protocol
+  - Task 19 wires `dotnet publish` into `build_runner` so the binary is always up to date
+  - Task 20 implements `WorkerBinaryLocator` for runtime binary resolution
+  - Task 21 replaces the `PipeInteropBridge` stub with the full worker-pool implementation
+  - Task 22 is the final checkpoint covering both Dart tests and the build step
+- The worker pool (task 21) uses `Platform.numberOfProcessors` workers by default, clamped
+  to [1, 8]; each worker handles one request at a time over its own stdin/stdout pair
 - `FrontendResult` in `stage_results.dart` is a stub; task 1 replaces it with the full model

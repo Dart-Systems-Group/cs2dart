@@ -24,16 +24,26 @@ objects.
 ### Interop Architecture
 
 Dart cannot call Roslyn APIs natively. The `Roslyn_Frontend` is therefore implemented as a Dart
-class (`RoslynFrontend`) that delegates all Roslyn work to a companion .NET process
-(`cs2dart_roslyn_worker`) via an interop bridge. The bridge communicates over a local pipe using
-a length-prefixed JSON protocol. The Dart side sends a serialized `LoadResult` (project paths,
-compilation options, metadata references) and receives back a serialized `FrontendResult`
-(plain-data records only — no Roslyn types cross the boundary).
+class (`RoslynFrontend`) that delegates all Roslyn work to a pool of companion .NET processes
+(`cs2dart_roslyn_worker`) via `PipeInteropBridge`. Each worker communicates over its own
+stdin/stdout pair using a 4-byte little-endian length-prefixed JSON protocol. The Dart side
+sends a serialized `InteropRequest` (project paths, compilation options, metadata references)
+and receives back a serialized `FrontendResult` (plain-data records only — no Roslyn types
+cross the boundary).
+
+The worker binary is produced by running `dotnet publish` on the `cs2dart_roslyn_worker/`
+project as part of the Dart build step (via `build_runner`). The published self-contained
+binary is placed at `build/roslyn_worker/cs2dart_roslyn_worker[.exe]`.
+
+`PipeInteropBridge` maintains a pool of worker processes (default size: logical CPU count,
+clamped to 1–8). The pool is created lazily on the first `invoke()` call. Each worker handles
+one request at a time; concurrent `invoke()` calls are queued and dispatched to the next free
+worker. All workers are terminated on `dispose()`.
 
 The interop boundary is the point where Roslyn types are converted to plain-data records. Once
-the .NET worker has finished processing a file, it serializes the `Normalized_SyntaxTree` and
-`SymbolTable` to JSON and sends them to the Dart side. The Dart side deserializes them into the
-`FrontendResult` data model. No Roslyn type ever appears in the Dart heap.
+the .NET worker has finished processing a request, it serializes the `FrontendResult` to JSON,
+writes the length-prefixed payload to stdout, and waits for the next request. No Roslyn type
+ever appears in the Dart heap.
 
 ---
 
@@ -47,31 +57,48 @@ the .NET worker has finished processing a file, it serializes the `Normalized_Sy
                                │  LoadResult (plain-data)
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  lib/src/roslyn_frontend/roslyn_frontend.dart                        │
+│  lib/src/roslyn_frontend/roslyn_frontend_impl.dart                   │
 │  RoslynFrontend  (implements IRoslynFrontend)                        │
 │                                                                      │
 │   ┌──────────────────────────────────────────────────────────────┐   │
-│   │  InteropBridge  (manages .NET worker process lifecycle)      │   │
-│   │    ├─ spawn / reuse cs2dart_roslyn_worker process            │   │
-│   │    ├─ serialize LoadResult → JSON request                    │   │
-│   │    └─ deserialize JSON response → FrontendResult             │   │
+│   │  PipeInteropBridge  (implements IInteropBridge)              │   │
+│   │    ├─ WorkerPool (N worker processes, default = CPU count)   │   │
+│   │    │    ├─ WorkerProcess #1  (stdin/stdout, length-prefix)   │   │
+│   │    │    ├─ WorkerProcess #2                                  │   │
+│   │    │    └─ WorkerProcess #N                                  │   │
+│   │    ├─ queue pending invoke() calls                           │   │
+│   │    ├─ dispatch to free worker                                │   │
+│   │    ├─ serialize InteropRequest → length-prefixed JSON        │   │
+│   │    └─ deserialize length-prefixed JSON → FrontendResult      │   │
 │   └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
 │   ┌──────────────────────────────────────────────────────────────┐   │
 │   │  FrontendResultAssembler  (Dart-side post-processing)        │   │
 │   │    ├─ propagate PL diagnostics from LoadResult               │   │
 │   │    ├─ set Frontend_Result.Success                            │   │
-│   │    └─ validate no Roslyn types in result                     │   │
+│   │    └─ deduplicate diagnostics (RF0012)                       │   │
 │   └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────┬───────────────────────────────────────┘
-                               │  (local pipe, JSON protocol)
+                               │  (stdin/stdout, length-prefixed JSON)
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  cs2dart_roslyn_worker  (.NET 8 console process)                     │
+│  cs2dart_roslyn_worker/  (.NET 8 self-contained console process)     │
+│  Built by: dotnet publish -c Release -r <rid> --self-contained true  │
+│  Output:   build/roslyn_worker/cs2dart_roslyn_worker[.exe]           │
+│                                                                      │
+│   ┌──────────────────────────────────────────────────────────────┐   │
+│   │  Program.cs  (request loop)                                  │   │
+│   │    ├─ read 4-byte LE length from stdin                       │   │
+│   │    ├─ read N bytes of UTF-8 JSON                             │   │
+│   │    ├─ deserialize → InteropRequest                           │   │
+│   │    ├─ invoke WorkerRequestHandler                            │   │
+│   │    ├─ serialize FrontendResult → UTF-8 JSON                  │   │
+│   │    ├─ write 4-byte LE length to stdout                       │   │
+│   │    └─ write N bytes of UTF-8 JSON to stdout                  │   │
+│   └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
 │   ┌──────────────────────────────────────────────────────────────┐   │
 │   │  WorkerRequestHandler                                        │   │
-│   │    ├─ deserialize LoadResult JSON                            │   │
 │   │    └─ invoke ProjectProcessor per ProjectEntry               │   │
 │   └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
@@ -105,8 +132,8 @@ the .NET worker has finished processing a file, it serializes the `Normalized_Sy
                          IR_Builder
 ```
 
-All Roslyn types are confined to the .NET worker process. The `FrontendResult` that crosses the
-interop boundary contains only plain-data records.
+All Roslyn types are confined to the .NET worker processes. The `FrontendResult` that crosses
+the interop boundary contains only plain-data records.
 
 ---
 
@@ -154,14 +181,84 @@ supply a fake without spawning a real .NET process.
 
 ```dart
 abstract interface class IInteropBridge {
-  /// Sends [request] to the .NET worker and returns the deserialized response.
+  /// Sends [request] to a free worker and returns the deserialized response.
   ///
   /// Throws [InteropException] if the worker process exits unexpectedly or
   /// returns a malformed response.
   Future<FrontendResult> invoke(InteropRequest request);
 
-  /// Terminates the worker process if it is running.
+  /// Terminates all worker processes in the pool.
   Future<void> dispose();
+}
+```
+
+### `PipeInteropBridge`
+
+The production implementation of `IInteropBridge`. Manages a pool of `cs2dart_roslyn_worker`
+processes and dispatches requests to free workers over stdin/stdout.
+
+```dart
+final class PipeInteropBridge implements IInteropBridge {
+  /// Number of worker processes to maintain. Defaults to [Platform.numberOfProcessors],
+  /// clamped to the range [1, 8].
+  final int poolSize;
+
+  /// Absolute path to the worker binary.
+  /// Defaults to <packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe].
+  final String workerBinaryPath;
+
+  PipeInteropBridge({int? poolSize, String? workerBinaryPath});
+
+  @override
+  Future<FrontendResult> invoke(InteropRequest request);
+
+  @override
+  Future<void> dispose();
+}
+```
+
+**Pool lifecycle:**
+1. On the first `invoke()` call, `PipeInteropBridge` spawns `poolSize` worker processes using
+   `dart:io Process.start()`, capturing each process's stdin and stdout.
+2. Each worker is tracked as either *free* or *busy*. A free worker is immediately assigned to
+   an incoming `invoke()` call; if all workers are busy the call is queued.
+3. When a worker finishes a request it is marked free and the next queued call (if any) is
+   dispatched to it.
+4. If a worker exits unexpectedly (non-zero exit code or stdout EOF before a response is
+   received), its pending `invoke()` future completes with an `InteropException` containing the
+   worker's captured stderr. A replacement worker is spawned to restore pool size.
+5. `dispose()` sends EOF to each worker's stdin and waits for all processes to exit, then
+   cancels any queued requests with an `InteropException`.
+
+**Wire protocol (per request/response pair):**
+```
+Request  (Dart → worker stdin):
+  [4 bytes, little-endian uint32]  byte length of the UTF-8 JSON payload
+  [N bytes, UTF-8]                 JSON-encoded InteropRequest
+
+Response (worker stdout → Dart):
+  [4 bytes, little-endian uint32]  byte length of the UTF-8 JSON payload
+  [N bytes, UTF-8]                 JSON-encoded FrontendResult
+```
+
+The worker writes all diagnostic/error text to stderr only. Stdout carries only the
+length-prefixed JSON response. This separation allows `PipeInteropBridge` to capture stderr
+independently for error reporting without interfering with the response stream.
+
+### `WorkerBinaryLocator`
+
+A small helper that resolves the worker binary path at runtime:
+
+```dart
+final class WorkerBinaryLocator {
+  /// Returns the absolute path to the worker binary.
+  ///
+  /// Search order:
+  ///   1. Explicit [override] path (if provided).
+  ///   2. <packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe]
+  ///
+  /// Throws [InteropException] if the binary does not exist at the resolved path.
+  static String resolve({String? override});
 }
 ```
 
@@ -210,6 +307,114 @@ final class FrontendResultAssembler {
   );
 }
 ```
+
+---
+
+## .NET Worker Project (`cs2dart_roslyn_worker`)
+
+### Project Structure
+
+```
+cs2dart_roslyn_worker/
+├── cs2dart_roslyn_worker.csproj   (.NET 8, net8.0, self-contained publish)
+├── Program.cs                     (entry point: request loop)
+├── WorkerRequestHandler.cs        (deserialize → ProjectProcessor → serialize)
+├── ProjectProcessor.cs            (per-ProjectEntry normalization pipeline)
+├── NormalizationPipeline/
+│   ├── INormalizationPass.cs
+│   ├── PartialMergingPass.cs
+│   ├── LinqNormalizationPass.cs
+│   ├── AsyncAnnotationPass.cs
+│   ├── PatternMatchingPass.cs
+│   ├── AutoPropertyPass.cs
+│   ├── UsingLockCheckedPass.cs
+│   ├── ForeachPass.cs
+│   ├── IndexerPass.cs
+│   ├── ExtensionMethodPass.cs
+│   └── ExplicitInterfacePass.cs
+├── Enrichment/
+│   ├── TypeAnnotationEnricher.cs
+│   ├── AttributeExtractor.cs
+│   ├── DeclarationMetadataExtractor.cs
+│   └── SymbolTableBuilder.cs
+├── Models/
+│   └── (C# mirror of the Dart plain-data models for JSON serialization)
+└── Serialization/
+    ├── InteropRequestDeserializer.cs
+    └── FrontendResultSerializer.cs
+```
+
+### `cs2dart_roslyn_worker.csproj`
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" />
+  </ItemGroup>
+</Project>
+```
+
+### `Program.cs` — Request Loop
+
+The worker runs a synchronous request loop on stdin/stdout. It does not use async I/O at the
+top level to keep the protocol simple and avoid buffering surprises.
+
+```csharp
+// Pseudocode — actual implementation uses BinaryReader/BinaryWriter
+while (true) {
+    // 1. Read 4-byte LE length prefix from stdin.
+    int length = ReadLittleEndianInt32(stdin);
+
+    // 2. Read exactly `length` bytes of UTF-8 JSON.
+    string json = ReadUtf8String(stdin, length);
+
+    // 3. Deserialize to InteropRequest.
+    var request = InteropRequestDeserializer.Deserialize(json);
+
+    // 4. Process.
+    var result = WorkerRequestHandler.Handle(request);
+
+    // 5. Serialize FrontendResult to JSON.
+    string responseJson = FrontendResultSerializer.Serialize(result);
+    byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson);
+
+    // 6. Write 4-byte LE length prefix + JSON bytes to stdout.
+    WriteLittleEndianInt32(stdout, responseBytes.Length);
+    stdout.Write(responseBytes);
+    stdout.Flush();
+}
+```
+
+All exceptions are caught at the top level, written to stderr, and cause a non-zero exit.
+
+### Build Integration
+
+The Dart `build_runner` step invokes `dotnet publish` via a `Builder` defined in
+`tool/build/roslyn_worker_builder.dart`:
+
+```
+dotnet publish cs2dart_roslyn_worker/cs2dart_roslyn_worker.csproj \
+  -c Release \
+  -r <current-RID>  \
+  --self-contained true \
+  -o build/roslyn_worker/
+```
+
+The runtime identifier (`<current-RID>`) is determined at build time from `Platform.operatingSystem`:
+- `linux` → `linux-x64`
+- `macos` → `osx-x64` (or `osx-arm64` on Apple Silicon)
+- `windows` → `win-x64`
+
+The builder declares `cs2dart_roslyn_worker/**` as inputs and
+`build/roslyn_worker/cs2dart_roslyn_worker[.exe]` as output, so `build_runner` only re-runs
+`dotnet publish` when the worker source changes.
 
 ---
 

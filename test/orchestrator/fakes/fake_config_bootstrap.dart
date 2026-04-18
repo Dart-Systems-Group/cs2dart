@@ -1,6 +1,7 @@
 import 'package:cs2dart/src/orchestrator/interfaces/i_config_bootstrap.dart';
 
 import 'fake_config_service.dart';
+import 'fake_roslyn_frontend.dart';
 
 /// A test double for [IConfigBootstrap] that records whether it was called and
 /// returns a pre-configured [(ConfigLoadResult, PipelineContainer?)] tuple.
@@ -24,7 +25,10 @@ final class FakeConfigBootstrap implements IConfigBootstrap {
       config: null,
       diagnostics: [],
     ),
-    PipelineContainer(configService: FakeConfigService()),
+    PipelineContainer(
+      configService: FakeConfigService(),
+      roslynFrontend: FakeRoslynFrontend(),
+    ),
   );
 
   /// When non-null, [load] throws this exception instead of returning [result].

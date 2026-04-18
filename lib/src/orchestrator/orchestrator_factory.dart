@@ -2,6 +2,9 @@ import '../project_loader/compilation_builder.dart';
 import '../project_loader/input_parser.dart';
 import '../project_loader/nuget_handler.dart';
 import '../project_loader/sdk_resolver.dart';
+import '../roslyn_frontend/frontend_result_assembler.dart';
+import '../roslyn_frontend/pipe_interop_bridge.dart';
+import '../roslyn_frontend/roslyn_frontend_impl.dart' as rf;
 import 'orchestrator.dart';
 import 'project_loader_adapter.dart';
 
@@ -10,16 +13,6 @@ import 'project_loader_adapter.dart';
 // Each stub throws [UnimplementedError] so that the factory compiles while
 // the concrete implementations are developed in parallel specs.
 // ---------------------------------------------------------------------------
-
-/// Stub [IRoslynFrontend] — throws [UnimplementedError] until the
-/// Roslyn Frontend spec is implemented.
-final class RoslynFrontend implements IRoslynFrontend {
-  const RoslynFrontend();
-
-  @override
-  Future<FrontendResult> process(loadResult, config) =>
-      throw UnimplementedError('RoslynFrontend is not yet implemented.');
-}
 
 /// Stub [IIrBuilder] — throws [UnimplementedError] until the
 /// IR Builder spec is implemented.
@@ -64,9 +57,11 @@ final class OrchestratorFactory {
   /// Creates a fully-wired production [Orchestrator].
   ///
   /// The [ProjectLoader] is wired with its own production dependencies.
-  /// The remaining pipeline stages ([RoslynFrontend], [IrBuilder],
-  /// [DartGenerator], [Validator]) are stub implementations that throw
-  /// [UnimplementedError] until their respective specs are completed.
+  /// [RoslynFrontend] is wired with [PipeInteropBridge] (a placeholder that
+  /// throws [UnimplementedError] until the .NET worker bridge is built).
+  /// The remaining pipeline stages ([IrBuilder], [DartGenerator], [Validator])
+  /// are stub implementations that throw [UnimplementedError] until their
+  /// respective specs are completed.
   static Orchestrator create() => Orchestrator(
         projectLoader: ProjectLoaderAdapter(
           inputParser: const InputParser(),
@@ -74,7 +69,10 @@ final class OrchestratorFactory {
           nugetHandler: const NuGetHandler(),
           compilationBuilder: const CompilationBuilder(),
         ),
-        roslynFrontend: const RoslynFrontend(),
+        roslynFrontend: rf.RoslynFrontend(
+          bridge: const PipeInteropBridge(),
+          assembler: const FrontendResultAssembler(),
+        ),
         irBuilder: const IrBuilder(),
         dartGenerator: const DartGenerator(),
         validator: const Validator(),

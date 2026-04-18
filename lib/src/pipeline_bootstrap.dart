@@ -7,9 +7,13 @@ import 'project_loader/interfaces/i_project_loader.dart';
 import 'project_loader/nuget_handler.dart';
 import 'project_loader/project_loader_impl.dart';
 import 'project_loader/sdk_resolver.dart';
+import 'roslyn_frontend/frontend_result_assembler.dart';
+import 'roslyn_frontend/interfaces/i_roslyn_frontend.dart';
+import 'roslyn_frontend/pipe_interop_bridge.dart';
+import 'roslyn_frontend/roslyn_frontend_impl.dart';
 
 /// A minimal service container that holds the [IConfigService] singleton
-/// for the current pipeline run.
+/// and pre-wired pipeline stage instances for the current pipeline run.
 ///
 /// Constructed by [bootstrapPipeline] after a successful config load.
 /// Pipeline modules receive [IConfigService] via constructor injection
@@ -18,7 +22,13 @@ final class PipelineContainer {
   /// The single [IConfigService] instance for this pipeline run.
   final IConfigService configService;
 
-  const PipelineContainer({required this.configService});
+  /// The fully-wired [IRoslynFrontend] instance for this pipeline run.
+  final IRoslynFrontend roslynFrontend;
+
+  const PipelineContainer({
+    required this.configService,
+    required this.roslynFrontend,
+  });
 }
 
 /// Creates a fully wired [IProjectLoader] with all sub-component dependencies.
@@ -31,6 +41,21 @@ IProjectLoader createProjectLoader() {
     sdkResolver: SdkResolver(),
     nugetHandler: NuGetHandler(),
     compilationBuilder: CompilationBuilder(),
+  );
+}
+
+/// Creates a fully wired [IRoslynFrontend] with all sub-component dependencies.
+///
+/// Uses [PipeInteropBridge] as the production [IInteropBridge] implementation.
+/// [PipeInteropBridge] currently throws [UnimplementedError] — it is a
+/// placeholder until the .NET worker communication layer is built.
+///
+/// The [IConfigService] is passed to [IRoslynFrontend.process] at call time,
+/// not at construction — so this factory requires no arguments.
+IRoslynFrontend createRoslynFrontend() {
+  return RoslynFrontend(
+    bridge: const PipeInteropBridge(),
+    assembler: const FrontendResultAssembler(),
   );
 }
 
@@ -63,6 +88,9 @@ Future<(ConfigLoadResult, PipelineContainer?)> bootstrapPipeline({
     return (result, null);
   }
 
-  final container = PipelineContainer(configService: result.service!);
+  final container = PipelineContainer(
+    configService: result.service!,
+    roslynFrontend: createRoslynFrontend(),
+  );
   return (result, container);
 }

@@ -13,7 +13,11 @@
         {
             "name": "cs2dart",
             "request": "launch",
-            "type": "dart"
+            "type": "dart",
+            "args": [
+                "${workspaceFolder}/sample/Console/console.csproj",
+                "--output", "${workspaceFolder}/sample/Console/transpiled"
+            ]
         }
     ]
 }

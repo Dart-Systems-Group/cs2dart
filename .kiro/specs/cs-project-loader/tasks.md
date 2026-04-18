@@ -38,7 +38,7 @@ can consume.
     - Emit `PL0004` Error on malformed `.sln`
     - _Requirements: 1.2_
 
-  - [ ] 2.3 Migrate `InputParser` to `package:xml`
+  - [x] 2.3 Migrate `InputParser` to `package:xml`
     - Add `xml: ^6.5.0` to `dependencies` in `pubspec.yaml` and run `dart pub get`
     - Replace the hand-rolled `_XmlParser` / `_XmlElement` / `_XmlParseException` classes in
       `input_parser.dart` with `XmlDocument.parse` from `package:xml`

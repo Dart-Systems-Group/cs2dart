@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:xml/xml.dart';
+
 import 'interfaces/i_input_parser.dart';
 import 'models/package_reference_spec.dart';
 import 'models/project_file_data.dart';
@@ -106,30 +108,25 @@ final class InputParser implements IInputParser {
   // ---------------------------------------------------------------------------
 
   ProjectFileData _parseCsprojContent(String absolutePath, String content) {
-    // Validate that the content looks like XML at all.
+    // Guard: empty file.
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
       throw MalformedCsprojException(absolutePath, 'File is empty');
     }
 
-    // Basic XML well-formedness check: must start with '<' and contain a root element.
-    if (!trimmed.startsWith('<')) {
-      throw MalformedCsprojException(
-          absolutePath, 'Content does not start with an XML tag');
-    }
-
-    // Parse the XML into a simple element tree.
-    final _XmlElement root;
+    // Parse XML using package:xml; XmlException is thrown on malformed input.
+    final XmlDocument document;
     try {
-      root = _parseXml(content);
-    } on _XmlParseException catch (e) {
+      document = XmlDocument.parse(content);
+    } on XmlException catch (e) {
       throw MalformedCsprojException(absolutePath, e.message);
     }
 
-    // Validate root element is <Project>.
-    if (root.name.toLowerCase() != 'project') {
+    // Validate root element is <Project> (case-insensitive).
+    final root = document.rootElement;
+    if (root.name.local.toLowerCase() != 'project') {
       throw MalformedCsprojException(
-          absolutePath, 'Root element must be <Project>, got <${root.name}>');
+          absolutePath, 'Root element must be <Project>');
     }
 
     final projectDir = File(absolutePath).parent.path;
@@ -146,8 +143,9 @@ final class InputParser implements IInputParser {
     final projectReferencePaths = <String>[];
     final packageReferences = <PackageReferenceSpec>[];
 
-    for (final child in root.children) {
-      if (child.name.toLowerCase() == 'propertygroup') {
+    for (final child in root.childElements) {
+      final childName = child.name.local.toLowerCase();
+      if (childName == 'propertygroup') {
         _parsePropertyGroup(child, (name, value) {
           switch (name.toLowerCase()) {
             case 'assemblyname':
@@ -166,7 +164,7 @@ final class InputParser implements IInputParser {
               nullableEnabled = value.trim().toLowerCase() == 'enable';
           }
         });
-      } else if (child.name.toLowerCase() == 'itemgroup') {
+      } else if (childName == 'itemgroup') {
         _parseItemGroup(
           child,
           projectDir,
@@ -209,11 +207,11 @@ final class InputParser implements IInputParser {
   /// Iterates over direct child elements of a `<PropertyGroup>` and calls [onProperty]
   /// for each one with its element name and text content.
   void _parsePropertyGroup(
-      _XmlElement group, void Function(String name, String value) onProperty) {
-    for (final child in group.children) {
-      final text = child.textContent.trim();
+      XmlElement group, void Function(String name, String value) onProperty) {
+    for (final child in group.childElements) {
+      final text = child.innerText.trim();
       if (text.isNotEmpty) {
-        onProperty(child.name, text);
+        onProperty(child.name.local, text);
       }
     }
   }
@@ -221,37 +219,37 @@ final class InputParser implements IInputParser {
   /// Iterates over direct child elements of an `<ItemGroup>` and populates the
   /// provided lists with `<Compile>`, `<ProjectReference>`, and `<PackageReference>` data.
   void _parseItemGroup(
-    _XmlElement group,
+    XmlElement group,
     String projectDir,
     List<String> compileIncludes,
     List<String> compileRemoves,
     List<String> projectReferencePaths,
     List<PackageReferenceSpec> packageReferences,
   ) {
-    for (final child in group.children) {
-      switch (child.name.toLowerCase()) {
+    for (final child in group.childElements) {
+      switch (child.name.local.toLowerCase()) {
         case 'compile':
-          final include = child.attributes['Include'] ?? child.attributes['include'];
+          final include = child.getAttribute('Include') ?? child.getAttribute('include');
           if (include != null && include.isNotEmpty) {
             compileIncludes.add(include);
           }
-          final remove = child.attributes['Remove'] ?? child.attributes['remove'];
+          final remove = child.getAttribute('Remove') ?? child.getAttribute('remove');
           if (remove != null && remove.isNotEmpty) {
             compileRemoves.add(remove);
           }
 
         case 'projectreference':
-          final include = child.attributes['Include'] ?? child.attributes['include'];
+          final include = child.getAttribute('Include') ?? child.getAttribute('include');
           if (include != null && include.isNotEmpty) {
             projectReferencePaths.add(_resolvePath(projectDir, include));
           }
 
         case 'packagereference':
-          final name = child.attributes['Include'] ?? child.attributes['include'];
-          final version = child.attributes['Version'] ??
-              child.attributes['version'] ??
-              _childText(child, 'Version') ??
-              _childText(child, 'version') ??
+          final name = child.getAttribute('Include') ?? child.getAttribute('include');
+          final version = child.getAttribute('Version') ??
+              child.getAttribute('version') ??
+              child.getElement('Version')?.innerText ??
+              child.getElement('version')?.innerText ??
               '';
           if (name != null && name.isNotEmpty) {
             packageReferences.add(PackageReferenceSpec(
@@ -261,17 +259,6 @@ final class InputParser implements IInputParser {
           }
       }
     }
-  }
-
-  /// Returns the text content of the first child element with [name], or null.
-  String? _childText(_XmlElement element, String name) {
-    for (final child in element.children) {
-      if (child.name.toLowerCase() == name.toLowerCase()) {
-        final text = child.textContent.trim();
-        return text.isEmpty ? null : text;
-      }
-    }
-    return null;
   }
 
   /// Resolves [path] relative to [base] if it is not already absolute.
@@ -304,264 +291,5 @@ final class InputParser implements IInputParser {
 
     csFiles.sort();
     return csFiles;
-  }
-}
-
-// =============================================================================
-// Minimal XML parser
-// =============================================================================
-
-/// Thrown when the XML content cannot be parsed.
-final class _XmlParseException implements Exception {
-  final String message;
-  const _XmlParseException(this.message);
-}
-
-/// A lightweight XML element node.
-final class _XmlElement {
-  final String name;
-  final Map<String, String> attributes;
-  final List<_XmlElement> children;
-  final String textContent;
-
-  const _XmlElement({
-    required this.name,
-    required this.attributes,
-    required this.children,
-    required this.textContent,
-  });
-}
-
-/// Parses [xml] into an [_XmlElement] tree.
-///
-/// Supports the subset of XML used by `.csproj` files:
-/// - Elements with attributes
-/// - Nested elements
-/// - Text content
-/// - XML declaration (`<?xml ... ?>`) and comments (`<!-- ... -->`) are skipped
-/// - CDATA sections are not supported
-///
-/// Throws [_XmlParseException] on malformed input.
-_XmlElement _parseXml(String xml) {
-  final parser = _XmlParser(xml);
-  return parser.parse();
-}
-
-final class _XmlParser {
-  final String _src;
-  int _pos = 0;
-
-  _XmlParser(this._src);
-
-  _XmlElement parse() {
-    _skipWhitespace();
-    // Skip XML declaration and processing instructions.
-    while (_pos < _src.length && _peek(2) == '<?') {
-      _skipUntil('?>');
-      _pos += 2; // skip '?>'
-      _skipWhitespace();
-    }
-    // Skip comments.
-    _skipComments();
-    if (_pos >= _src.length) {
-      throw const _XmlParseException('Empty XML document');
-    }
-    final root = _parseElement();
-    return root;
-  }
-
-  _XmlElement _parseElement() {
-    _skipWhitespace();
-    _skipComments();
-    if (_pos >= _src.length || _src[_pos] != '<') {
-      throw _XmlParseException(
-          'Expected "<" at position $_pos, got "${_pos < _src.length ? _src[_pos] : "EOF"}"');
-    }
-    _pos++; // consume '<'
-
-    // Self-closing or closing tag check handled by caller; here we parse an opening tag.
-    final name = _parseName();
-    if (name.isEmpty) {
-      throw _XmlParseException('Empty element name at position $_pos');
-    }
-
-    final attributes = _parseAttributes();
-
-    _skipWhitespace();
-    if (_pos >= _src.length) {
-      throw _XmlParseException('Unexpected end of input after <$name');
-    }
-
-    // Self-closing element: `<Foo />`
-    if (_src[_pos] == '/') {
-      _pos++; // consume '/'
-      if (_pos >= _src.length || _src[_pos] != '>') {
-        throw _XmlParseException('Expected ">" after "/" in self-closing tag <$name');
-      }
-      _pos++; // consume '>'
-      return _XmlElement(
-          name: name, attributes: attributes, children: [], textContent: '');
-    }
-
-    if (_src[_pos] != '>') {
-      throw _XmlParseException(
-          'Expected ">" to close opening tag <$name, got "${_src[_pos]}"');
-    }
-    _pos++; // consume '>'
-
-    // Parse children and text content.
-    final children = <_XmlElement>[];
-    final textBuffer = StringBuffer();
-    var closingTagFound = false;
-
-    while (_pos < _src.length) {
-      _skipComments();
-      if (_pos >= _src.length) break;
-
-      if (_src[_pos] == '<') {
-        // Peek ahead to see if this is a closing tag.
-        if (_pos + 1 < _src.length && _src[_pos + 1] == '/') {
-          // Closing tag.
-          _pos += 2; // consume '</'
-          final closingName = _parseName();
-          _skipWhitespace();
-          if (_pos >= _src.length || _src[_pos] != '>') {
-            throw _XmlParseException('Expected ">" to close </$closingName>');
-          }
-          _pos++; // consume '>'
-          if (closingName.toLowerCase() != name.toLowerCase()) {
-            throw _XmlParseException(
-                'Mismatched tags: opened <$name>, closed </$closingName>');
-          }
-          closingTagFound = true;
-          break;
-        } else {
-          // Child element.
-          final child = _parseElement();
-          children.add(child);
-        }
-      } else {
-        // Text content.
-        textBuffer.write(_src[_pos]);
-        _pos++;
-      }
-    }
-
-    if (!closingTagFound) {
-      throw _XmlParseException('Missing closing tag for <$name>');
-    }
-
-    return _XmlElement(
-      name: name,
-      attributes: attributes,
-      children: children,
-      textContent: _decodeEntities(textBuffer.toString()),
-    );
-  }
-
-  Map<String, String> _parseAttributes() {
-    final attrs = <String, String>{};
-    while (true) {
-      _skipWhitespace();
-      if (_pos >= _src.length) break;
-      final ch = _src[_pos];
-      if (ch == '>' || ch == '/') break;
-
-      final attrName = _parseName();
-      if (attrName.isEmpty) break;
-
-      _skipWhitespace();
-      if (_pos >= _src.length || _src[_pos] != '=') {
-        // Attribute without value (boolean attribute) — not standard XML but be lenient.
-        attrs[attrName] = '';
-        continue;
-      }
-      _pos++; // consume '='
-      _skipWhitespace();
-
-      if (_pos >= _src.length) {
-        throw _XmlParseException('Unexpected end of input reading attribute "$attrName"');
-      }
-
-      final quote = _src[_pos];
-      if (quote != '"' && quote != "'") {
-        throw _XmlParseException(
-            'Expected quote for attribute "$attrName", got "${_src[_pos]}"');
-      }
-      _pos++; // consume opening quote
-      final valueBuffer = StringBuffer();
-      while (_pos < _src.length && _src[_pos] != quote) {
-        valueBuffer.write(_src[_pos]);
-        _pos++;
-      }
-      if (_pos >= _src.length) {
-        throw _XmlParseException('Unterminated attribute value for "$attrName"');
-      }
-      _pos++; // consume closing quote
-      attrs[attrName] = _decodeEntities(valueBuffer.toString());
-    }
-    return attrs;
-  }
-
-  String _parseName() {
-    final start = _pos;
-    while (_pos < _src.length) {
-      final ch = _src[_pos];
-      if (_isNameChar(ch)) {
-        _pos++;
-      } else {
-        break;
-      }
-    }
-    return _src.substring(start, _pos);
-  }
-
-  bool _isNameChar(String ch) {
-    final c = ch.codeUnitAt(0);
-    return (c >= 65 && c <= 90) || // A-Z
-        (c >= 97 && c <= 122) || // a-z
-        (c >= 48 && c <= 57) || // 0-9
-        c == 45 || // -
-        c == 46 || // .
-        c == 58 || // :
-        c == 95; // _
-  }
-
-  void _skipWhitespace() {
-    while (_pos < _src.length && _src[_pos].trim().isEmpty) {
-      _pos++;
-    }
-  }
-
-  void _skipComments() {
-    while (_pos + 3 < _src.length && _peek(4) == '<!--') {
-      _skipUntil('-->');
-      _pos += 3; // skip '-->'
-      _skipWhitespace();
-    }
-  }
-
-  void _skipUntil(String marker) {
-    while (_pos < _src.length) {
-      if (_pos + marker.length <= _src.length &&
-          _src.substring(_pos, _pos + marker.length) == marker) {
-        return;
-      }
-      _pos++;
-    }
-  }
-
-  String _peek(int length) {
-    if (_pos + length > _src.length) return '';
-    return _src.substring(_pos, _pos + length);
-  }
-
-  String _decodeEntities(String s) {
-    return s
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&apos;', "'");
   }
 }

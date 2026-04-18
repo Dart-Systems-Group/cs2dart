@@ -183,7 +183,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Generate random async method declarations (Task, Task<T>, ValueTask, void)
     - **Validates: Requirements 4.1–4.6, 15.8**
 
-- [ ] 10. Write unit tests for normalization passes
+- [x] 10. Write unit tests for normalization passes
 
   - [ ]* 10.1 Write unit tests for LINQ normalization (Pass 1)
     - Test `from x in xs where x > 0 select x * 2` rewrites to `.Where(x => x > 0).Select(x => x * 2)`
@@ -247,7 +247,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Test `ExplicitInterfaceAnnotation { implementedInterface }` is attached
     - _Requirements: 3.11_
 
-- [ ] 11. Write unit tests for enrichment and extraction components
+- [x] 11. Write unit tests for enrichment and extraction components
 
   - [ ]* 11.1 Write unit tests for type annotation enrichment
     - Test every expression node kind receives a non-null `IrType` annotation
@@ -305,7 +305,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
 - [x] 14. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 15. Write integration tests
+- [x] 15. Write integration tests
   - [ ]* 15.1 Write integration test: simple console project
     - Use `test/fixtures/simple_console/` fixture with a real .NET worker process
     - Verify basic normalization, symbol resolution, and `FrontendUnit` metadata
@@ -361,7 +361,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Ensure all tests pass (excluding `@Tags(['integration'])` unless .NET 8 SDK and
     `cs2dart_roslyn_worker` binary are available), ask the user if questions arise.
 
-- [ ] 18. Create the `cs2dart_roslyn_worker` .NET project scaffold
+- [x] 18. Create the `cs2dart_roslyn_worker` .NET project scaffold
   - Create `cs2dart_roslyn_worker/cs2dart_roslyn_worker.csproj` targeting `net8.0` with a
     `PackageReference` to `Microsoft.CodeAnalysis.CSharp` version `4.*`
   - Create `cs2dart_roslyn_worker/Program.cs` with the stdin/stdout request loop:
@@ -386,7 +386,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Verify the project builds with `dotnet build`
   - _Requirements: 16.1, 16.2, 16.3, 16.4_
 
-- [ ] 19. Implement the Dart build step for `dotnet publish`
+- [x] 19. Implement the Dart build step for `dotnet publish`
   - Create `tool/build/roslyn_worker_builder.dart` implementing a `build_runner` `Builder`
     that invokes:
     ```
@@ -405,7 +405,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Tag `@Tags(['integration'])`
     - _Requirements: 16.5_
 
-- [ ] 20. Implement `WorkerBinaryLocator`
+- [x] 20. Implement `WorkerBinaryLocator`
   - Create `lib/src/roslyn_frontend/worker_binary_locator.dart`
   - Implement `WorkerBinaryLocator.resolve({String? override})`:
     - If `override` is non-null and the file exists, return it
@@ -420,7 +420,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Test that `.exe` is appended on Windows (mock `Platform.isWindows`)
     - _Requirements: 16.6_
 
-- [ ] 21. Implement `PipeInteropBridge`
+- [x] 21. Implement `PipeInteropBridge`
   - Replace the stub in `lib/src/roslyn_frontend/pipe_interop_bridge.dart` with the full
     implementation:
   - Constructor accepts `int? poolSize` (default: `Platform.numberOfProcessors`, clamped 1–8)

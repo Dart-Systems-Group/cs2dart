@@ -5,3 +5,4 @@ export 'models/models.dart';
 export 'roslyn_frontend_impl.dart';
 export 'serialization/frontend_result_deserializer.dart';
 export 'serialization/interop_request_serializer.dart';
+export 'worker_binary_locator.dart';

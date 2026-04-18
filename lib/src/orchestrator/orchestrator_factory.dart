@@ -70,7 +70,7 @@ final class OrchestratorFactory {
           compilationBuilder: const CompilationBuilder(),
         ),
         roslynFrontend: rf.RoslynFrontend(
-          bridge: const PipeInteropBridge(),
+          bridge: PipeInteropBridge(),
           assembler: const FrontendResultAssembler(),
         ),
         irBuilder: const IrBuilder(),

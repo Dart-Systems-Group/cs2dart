@@ -47,14 +47,14 @@ IProjectLoader createProjectLoader() {
 /// Creates a fully wired [IRoslynFrontend] with all sub-component dependencies.
 ///
 /// Uses [PipeInteropBridge] as the production [IInteropBridge] implementation.
-/// [PipeInteropBridge] currently throws [UnimplementedError] — it is a
-/// placeholder until the .NET worker communication layer is built.
+/// The worker binary path and pool are resolved lazily on the first
+/// [IRoslynFrontend.process] call.
 ///
 /// The [IConfigService] is passed to [IRoslynFrontend.process] at call time,
 /// not at construction — so this factory requires no arguments.
 IRoslynFrontend createRoslynFrontend() {
   return RoslynFrontend(
-    bridge: const PipeInteropBridge(),
+    bridge: PipeInteropBridge(),
     assembler: const FrontendResultAssembler(),
   );
 }

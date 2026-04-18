@@ -45,7 +45,7 @@ class RoslynWorkerBuilder implements Builder {
         '--self-contained',
         'true',
         '-o',
-        'cs2dart_roslyn_worker/bin',
+        'cs2dart_roslyn_worker/bin/',
       ],
       runInShell: Platform.isWindows,
     );
@@ -57,7 +57,7 @@ class RoslynWorkerBuilder implements Builder {
       );
     }
 
-    final compiledPath = 'cs2dart_roslyn_worker/$binary';
+    final compiledPath = 'cs2dart_roslyn_worker/bin/$binary';
     log.info('dotnet publish succeeded. Binary: $compiledPath');
 
     // Write a synthetic asset so build_runner tracks the output.

@@ -119,7 +119,7 @@ module boundaries.
 #### Acceptance Criteria
 
 1. THE IR serialization round-trip property (IR Requirement 16.3) SHALL be tested with a PBT suite
-   that generates arbitrary valid IR trees, serializes them via the Pretty_Printer, parses the
+   that generates arbitrary valid IR trees, serializes them via the IR_Serializer, parses the
    output, and asserts structural equality with the original.
 2. THE Config_Service round-trip property (Config Requirement 2.6) SHALL be tested with a PBT suite
    that generates arbitrary valid `transpiler.yaml` content, parses it, serializes the resulting
@@ -183,7 +183,7 @@ across modules use consistent, well-understood inputs rather than duplicating fi
 
 1. THE test suite SHALL maintain a `fixtures/` directory at the repository root containing:
    - `csharp/` — C# source files and `.csproj` files covering every supported language feature
-   - `ir/` — serialized IR trees (Pretty_Printer output) for every fixture C# file
+   - `ir/` — serialized IR trees (JSON files produced by the IR_Serializer) for every fixture C# file
    - `dart/` — expected Dart output (golden files) for every fixture C# file
    - `configs/` — `transpiler.yaml` files covering every Config_Section and edge case
 2. EVERY fixture SHALL be named descriptively (e.g., `async_method_with_cancellation_token.cs`) and

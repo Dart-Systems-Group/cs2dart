@@ -22,8 +22,8 @@ without any further knowledge of C# syntax or Roslyn APIs.
 - **IR_Symbol**: A stable, fully-qualified identifier for a named entity (type, method, field, etc.).
 - **Roslyn_Model**: The Roslyn `SemanticModel` and `SyntaxTree` pair provided as input to this stage.
 - **Lowered_Form**: A simplified IR representation of a high-level C# construct (e.g., LINQ lowered to loops).
-- **Pretty_Printer**: The component that serializes an IR tree to a canonical, human-readable text format.
-- **Round_Trip**: The property that parsing a Pretty_Printer output reproduces an equivalent IR tree.
+- **IR_Serializer**: The component that serializes an IR tree to a canonical JSON representation.
+- **Round_Trip**: The property that parsing an IR_Serializer JSON output reproduces an equivalent IR tree.
 - **IR_Validator**: The component that checks structural and semantic invariants on a completed IR tree.
 - **Semantic_Fidelity**: The guarantee that the IR preserves the observable behavior of the source C# program.
 - **Determinism**: The guarantee that the same Roslyn_Model input always produces the same IR output.
@@ -257,20 +257,20 @@ identical input on every run, so that build caches and golden-file tests remain 
 
 ---
 
-### Requirement 13: IR Serialization and Pretty Printing
+### Requirement 13: IR Serialization
 
 **User Story:** As a developer debugging the transpiler, I want to serialize and deserialize IR trees
-to a stable text format, so that I can inspect IR output, write golden tests, and verify round-trip
+to a stable JSON format, so that I can inspect IR output, write golden tests, and verify round-trip
 correctness.
 
 #### Acceptance Criteria
 
-1. THE Pretty_Printer SHALL serialize any IR tree to a deterministic, human-readable text representation.
-2. THE Pretty_Printer SHALL produce output where every IR_Node type, every field name, and every IR_Type is explicitly named (no implicit or positional encoding).
-3. THE IR_Builder SHALL provide a parser that reads Pretty_Printer output and reconstructs an equivalent IR tree.
-4. FOR ALL valid IR trees, parsing the Pretty_Printer output SHALL produce an IR tree that is structurally and value-equal to the original (round-trip property).
-5. THE Pretty_Printer SHALL format IR trees consistently: one node per line, indented by nesting depth, with field names preceding values.
-6. WHEN the Pretty_Printer encounters an `UnsupportedNode` or `UnresolvedSymbol`, THE Pretty_Printer SHALL include the diagnostic message and source span in the serialized output.
+1. THE IR_Serializer SHALL serialize any IR tree to a deterministic, human-readable JSON representation.
+2. THE IR_Serializer SHALL produce output where every IR_Node type, every field name, and every IR_Type is explicitly named (no implicit or positional encoding).
+3. THE IR_Builder SHALL provide a parser that reads IR_Serializer JSON output and reconstructs an equivalent IR tree.
+4. FOR ALL valid IR trees, parsing the IR_Serializer JSON output SHALL produce an IR tree that is structurally and value-equal to the original (round-trip property).
+5. THE IR_Serializer SHALL format IR trees as valid, pretty-printed JSON: fields use camelCase keys, arrays preserve order, and null fields are omitted.
+6. WHEN the IR_Serializer encounters an `UnsupportedNode` or `UnresolvedSymbol`, THE IR_Serializer SHALL include the diagnostic message and source span in the serialized JSON output.
 
 ---
 
@@ -322,7 +322,7 @@ C# inputs.
 
 1. FOR ALL valid C# compilations, THE IR_Builder SHALL produce an IR tree where the count of top-level Declaration nodes equals the count of top-level type declarations in the source (invariant: declaration count preservation).
 2. FOR ALL valid C# compilations, running THE IR_Builder twice SHALL produce structurally equal IR trees (determinism property).
-3. FOR ALL valid IR trees, THE Pretty_Printer output parsed by the IR parser SHALL produce a structurally equal IR tree (round-trip property).
+3. FOR ALL valid IR trees, THE IR_Serializer JSON output parsed by the IR parser SHALL produce a structurally equal IR tree (round-trip property).
 4. FOR ALL valid IR trees, applying THE IR_Validator SHALL produce zero violations (well-formedness invariant for IR_Builder output).
 5. FOR ALL C# method bodies, the count of `ReturnStatement` IR nodes in the lowered IR SHALL be greater than or equal to the count of `return` statements in the original source (lowering may introduce additional returns, but SHALL NOT remove any).
 6. FOR ALL C# expressions, the IR_Type attached to the IR expression node SHALL be equal to the type reported by the Roslyn `SemanticModel` for the corresponding syntax node (type fidelity property).

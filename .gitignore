@@ -17,3 +17,6 @@ doc/api/
 # IDE-specific files (optional but recommended)
 .idea/
 *.iml
+
+obj
+bin

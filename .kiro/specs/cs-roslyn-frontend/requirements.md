@@ -29,16 +29,19 @@ downstream stages (IR_Builder, Dart_Generator, and subsystems) operate exclusive
 - **Frontend_Unit**: The normalized, fully-annotated representation of one C# project produced by
   the Roslyn_Frontend. Contains `ProjectName`, `OutputKind`, `TargetFramework`, `LangVersion`,
   `NullableEnabled`, `PackageReferences`, and `NormalizedTrees` (list of `Normalized_SyntaxTree`).
-- **Normalized_SyntaxTree**: A rewritten Roslyn `SyntaxTree` paired with its `SemanticModel` and
-  a `SymbolTable` that pre-resolves all named symbols referenced in the tree. The IR_Builder reads
-  from this structure rather than calling Roslyn APIs directly.
+- **Normalized_SyntaxTree**: A rewritten syntax tree (expressed as plain-data nodes, no Roslyn
+  types) paired with a `SymbolTable` that pre-resolves all named symbols referenced in the tree.
+  The IR_Builder reads from this structure rather than calling Roslyn APIs directly. The
+  Roslyn_Frontend uses the `SemanticModel` internally during construction but does not retain it
+  in the `Normalized_SyntaxTree`.
 - **SymbolTable**: A dictionary mapping every `SyntaxNode` in a `Normalized_SyntaxTree` that
   carries a named reference to its fully-resolved `ResolvedSymbol` record, populated by the
   Roslyn_Frontend before the `Frontend_Result` is handed off.
 - **ResolvedSymbol**: A plain-data record (no Roslyn types) containing: `FullyQualifiedName`
   (string), `AssemblyName` (string), `Kind` (enum: Type, Method, Field, Property, Event, Local,
-  Parameter), `SourcePackageId` (nullable string), `SourceLocation` (nullable file + line/column),
-  and `ConstantValue` (nullable boxed value for `const` symbols).
+  Parameter, Unresolved), `SourcePackageId` (nullable string), `SourceLocation` (nullable file +
+  line/column), and `ConstantValue` (nullable boxed value for `const` symbols). `Kind =
+  Unresolved` is used as a sentinel when Roslyn cannot bind a symbol (binding error).
 - **Normalization**: The process of rewriting a `SyntaxTree` so that semantically equivalent but
   syntactically distinct C# constructs are represented in a single canonical form.
 - **Lowering**: The process of transforming a high-level C# construct (e.g., a LINQ query
@@ -81,9 +84,10 @@ independently without coupling to Roslyn types.
 5. THE Roslyn_Frontend SHALL propagate all `PL`-prefixed diagnostics from `Load_Result.Diagnostics`
    into `Frontend_Result.Diagnostics` unchanged, so that the IR_Builder receives a single
    authoritative diagnostic list covering both loading and frontend processing.
-6. THE IR_Builder SHALL accept a `Frontend_Result` as its sole input and SHALL NOT call any Roslyn
-   API; all symbol resolution and type information SHALL be read from the `SymbolTable` and
-   `ResolvedSymbol` records in the `Frontend_Result`.
+6. THE Roslyn_Frontend SHALL ensure that the `Frontend_Result` contains no Roslyn types
+   (`SyntaxNode`, `SemanticModel`, `ISymbol`, `ITypeSymbol`, `CSharpCompilation`, or any type
+   from `Microsoft.CodeAnalysis.*`); all data SHALL be expressed as plain-data records so that
+   the IR_Builder can consume `Frontend_Result` without a Roslyn dependency.
 7. WHEN `Load_Result.Success` is `false`, THE Roslyn_Frontend SHALL still attempt processing for
    all `Project_Entry` items that have no `Error`-severity diagnostics, emitting an `RF`-prefixed
    `Warning` for each unit skipped due to upstream errors.

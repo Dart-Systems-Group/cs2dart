@@ -1,5 +1,4 @@
 import '../config/i_config_service.dart';
-import '../project_loader/models/diagnostic.dart';
 import 'config_bootstrap.dart';
 import 'directory_manager.dart';
 import 'interfaces/i_dart_generator.dart';
@@ -17,6 +16,7 @@ export 'interfaces/i_ir_builder.dart';
 export 'interfaces/i_project_loader.dart';
 export 'interfaces/i_roslyn_frontend.dart';
 export 'interfaces/i_validator.dart';
+export 'models/stage_results.dart' hide FrontendResult;
 export 'models/transpiler_options.dart';
 export 'models/transpiler_result.dart';
 
@@ -168,7 +168,7 @@ final class Orchestrator {
       final frontendResult = await _invokeStage(
         stageName: 'Roslyn_Frontend',
         collectedDiagnostics: collectedDiagnostics,
-        invoke: () => _roslynFrontend.process(loadResult),
+        invoke: () => _roslynFrontend.process(loadResult, configService),
       );
 
       collectedDiagnostics.addAll(frontendResult.diagnostics);

@@ -10,7 +10,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
 
 ## Tasks
 
-- [ ] 1. Define data models
+- [x] 1. Define data models
   - Create `lib/src/roslyn_frontend/models/` with all plain-data model classes:
     - `FrontendResult` (replaces the stub in `stage_results.dart`): `units`, `diagnostics`,
       `success`
@@ -31,7 +31,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Export all public symbols from `lib/src/roslyn_frontend/roslyn_frontend.dart`
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.2, 7.1, 8.1, 8.2_
 
-- [ ] 2. Define interfaces
+- [x] 2. Define interfaces
   - Create `lib/src/roslyn_frontend/interfaces/i_roslyn_frontend.dart` with the full
     `IRoslynFrontend` interface accepting `(LoadResult loadResult, IConfigService config)` —
     update the existing stub in `lib/src/orchestrator/interfaces/i_roslyn_frontend.dart` to
@@ -43,7 +43,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     `experimentalFeatures`)
   - _Requirements: 1.1, 1.3, 13.1, 13.2_
 
-- [ ] 3. Implement `FrontendResultAssembler`
+- [x] 3. Implement `FrontendResultAssembler`
   - Create `lib/src/roslyn_frontend/frontend_result_assembler.dart`
   - Implement `FrontendResult assemble(FrontendResult workerResult, LoadResult loadResult)`:
     - Prepend all `PL`-prefixed diagnostics from `loadResult.diagnostics` unchanged
@@ -60,7 +60,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Test `RF0012` Warning is emitted when a duplicate diagnostic is suppressed
     - _Requirements: 1.4, 1.5, 12.3, 12.4_
 
-- [ ] 4. Implement `RoslynFrontend`
+- [x] 4. Implement `RoslynFrontend`
   - Create `lib/src/roslyn_frontend/roslyn_frontend.dart` implementing `IRoslynFrontend`
   - Constructor accepts `IInteropBridge bridge` and optional `FrontendResultAssembler assembler`
   - `process(LoadResult loadResult, IConfigService config)`:
@@ -81,17 +81,17 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Test `FrontendResultAssembler.assemble` is called with the worker result and `loadResult`
     - _Requirements: 1.1, 1.2, 1.3, 1.7, 12.4, 12.6_
 
-- [ ] 5. Implement `FakeInteropBridge` for testing
+- [x] 5. Implement `FakeInteropBridge` for testing
   - Create `test/roslyn_frontend/fakes/fake_interop_bridge.dart` implementing `IInteropBridge`
   - Accepts a pre-configured `FrontendResult` (or a callback) to return from `invoke()`
   - Records whether `invoke()` and `dispose()` were called and with what arguments
   - Supports configuring it to throw `InteropException` for error-path tests
   - _Requirements: (supports all property and unit tests)_
 
-- [ ] 6. Checkpoint — Ensure all tests pass
+- [x] 6. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Implement `InteropRequest` serialization
+- [x] 7. Implement `InteropRequest` serialization
   - Create `lib/src/roslyn_frontend/serialization/interop_request_serializer.dart`
   - Implement `Map<String, dynamic> toJson(InteropRequest request)` covering all fields of
     `InteropRequest`, `ProjectEntryRequest`, and `FrontendConfig`

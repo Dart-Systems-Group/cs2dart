@@ -17,7 +17,7 @@ final class RoslynFrontend implements IRoslynFrontend {
   const RoslynFrontend();
 
   @override
-  Future<FrontendResult> process(loadResult) =>
+  Future<FrontendResult> process(loadResult, config) =>
       throw UnimplementedError('RoslynFrontend is not yet implemented.');
 }
 

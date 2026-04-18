@@ -8,7 +8,6 @@ import 'package:test/test.dart';
 import 'package:cs2dart/src/config/i_config_service.dart';
 import 'package:cs2dart/src/config/models/config_diagnostic.dart';
 import 'package:cs2dart/src/config/models/config_object.dart';
-import 'package:cs2dart/src/config/models/diagnostic_severity.dart';
 import 'package:cs2dart/src/orchestrator/orchestrator.dart';
 import 'package:cs2dart/src/project_loader/models/dependency_graph.dart';
 
@@ -608,9 +607,10 @@ final class _RecordingRoslynFrontend implements IRoslynFrontend {
   _RecordingRoslynFrontend(this._inner, this._order, this._name);
 
   @override
-  Future<FrontendResult> process(LoadResult loadResult) async {
+  Future<FrontendResult> process(
+      LoadResult loadResult, IConfigService config) async {
     _order.add(_name);
-    return _inner.process(loadResult);
+    return _inner.process(loadResult, config);
   }
 }
 

@@ -1,3 +1,4 @@
+import 'package:cs2dart/src/config/i_config_service.dart';
 import 'package:cs2dart/src/orchestrator/interfaces/i_roslyn_frontend.dart';
 import 'package:cs2dart/src/project_loader/models/load_result.dart';
 
@@ -15,7 +16,7 @@ final class FakeRoslynFrontend implements IRoslynFrontend {
 
   /// The result returned by [process]. Defaults to a successful single-unit result.
   FrontendResult result = const FrontendResult(
-    units: [Object()],
+    units: [],
     diagnostics: [],
     success: true,
   );
@@ -24,7 +25,8 @@ final class FakeRoslynFrontend implements IRoslynFrontend {
   Exception? throwException;
 
   @override
-  Future<FrontendResult> process(LoadResult loadResult) async {
+  Future<FrontendResult> process(
+      LoadResult loadResult, IConfigService config) async {
     wasCalled = true;
     if (throwException != null) throw throwException!;
     return result;

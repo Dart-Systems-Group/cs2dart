@@ -38,7 +38,22 @@ can consume.
     - Emit `PL0004` Error on malformed `.sln`
     - _Requirements: 1.2_
 
-  - [ ]* 2.3 Write unit tests for `InputParser`
+  - [ ] 2.3 Migrate `InputParser` to `package:xml`
+    - Add `xml: ^6.5.0` to `dependencies` in `pubspec.yaml` and run `dart pub get`
+    - Replace the hand-rolled `_XmlParser` / `_XmlElement` / `_XmlParseException` classes in
+      `input_parser.dart` with `XmlDocument.parse` from `package:xml`
+    - Use `document.rootElement` to obtain the `<Project>` element; validate its name
+      (case-insensitive) and throw `MalformedCsprojException` when it is not `"Project"`
+    - Replace `_parsePropertyGroup` / `_parseItemGroup` helpers with `element.findElements(name)`
+      and `element.getAttribute(name)` / `element.innerText` calls from `package:xml`
+    - Catch `XmlException` (thrown by `XmlDocument.parse`) and re-throw as
+      `MalformedCsprojException(path, e.message)`
+    - Keep the empty-file guard (`MalformedCsprojException(path, 'File is empty')`) before
+      calling `XmlDocument.parse`
+    - The `.sln` parser is unaffected — leave it unchanged
+    - _Requirements: 2.1, 2.2, 2.5_
+
+  - [ ]* 2.4 Write unit tests for `InputParser`
     - Test `.csproj` parsing with fixture files covering all metadata fields
     - Test glob expansion and alphabetical sorting of source files
     - Test `.sln` parsing with a multi-project fixture

@@ -1,0 +1,11 @@
+export 'annotations.dart';
+export 'frontend_result.dart';
+export 'frontend_unit.dart';
+export 'generic_syntax_node.dart';
+export 'interop_exception.dart';
+export 'interop_request.dart';
+export 'ir_type.dart';
+export 'normalized_syntax_tree.dart';
+export 'resolved_symbol.dart';
+export 'symbol_table.dart';
+export 'syntax_node.dart';

@@ -97,9 +97,13 @@ Parses `.csproj` and `.sln` XML files:
 abstract interface class IInputParser {
   /// Parses a .csproj file and returns a [ProjectFileData] containing
   /// source file globs, package references, project references, and metadata.
+  ///
+  /// Uses [XmlDocument.parse] from `package:xml` internally.
+  /// Throws [MalformedCsprojException] on malformed XML or unexpected root element.
   Future<ProjectFileData> parseCsproj(String absolutePath);
 
   /// Parses a .sln file and returns the list of .csproj paths it references.
+  /// Uses regex-based line matching; does not use `package:xml`.
   Future<List<String>> parseSln(String absolutePath);
 }
 ```
@@ -607,6 +611,60 @@ The property-based tests use [fast_check](https://fast-check.dev/) (via the Dart
 the Dart-native [propcheck](https://pub.dev/packages/propcheck) package. Each property test runs
 a minimum of **100 iterations**.
 
+---
+
+## XML Parsing
+
+### Library
+
+The `Input_Parser` uses [`package:xml`](https://pub.dev/packages/xml) for all `.csproj` XML
+parsing. The hand-rolled `_XmlParser` / `_XmlElement` implementation is replaced by the
+`XmlDocument.parse` DOM API provided by this package.
+
+Add to `pubspec.yaml`:
+
+```yaml
+dependencies:
+  xml: ^6.5.0
+```
+
+Import in `input_parser.dart`:
+
+```dart
+import 'package:xml/xml.dart';
+```
+
+### Parsing a `.csproj` file
+
+```dart
+final document = XmlDocument.parse(content); // throws XmlException on malformed input
+final root = document.rootElement;           // the <Project> element
+```
+
+`XmlException` (from `package:xml`) is caught and re-thrown as `MalformedCsprojException`
+with the original message forwarded as `details`.
+
+### Querying elements
+
+| Task | API |
+|---|---|
+| Find all `<PropertyGroup>` children | `root.findElements('PropertyGroup')` |
+| Find all `<ItemGroup>` children | `root.findElements('ItemGroup')` |
+| Read text content of a child element | `element.getElement('TargetFramework')?.innerText` |
+| Read an attribute value | `element.getAttribute('Include')` |
+| Find all `<PackageReference>` in an item group | `itemGroup.findElements('PackageReference')` |
+
+### Error mapping
+
+| `package:xml` condition | `InputParser` exception |
+|---|---|
+| `XmlException` thrown by `XmlDocument.parse` | `MalformedCsprojException(path, e.message)` |
+| `rootElement` name ≠ `"Project"` (case-insensitive) | `MalformedCsprojException(path, 'Root element must be <Project>')` |
+| Empty file content | `MalformedCsprojException(path, 'File is empty')` |
+
+The `.sln` parser is unaffected — it uses regex-based line matching and does not use
+`package:xml`.
+
 Each property test is tagged with a comment referencing the design property:
 
 ```dart
@@ -631,6 +689,7 @@ All sub-components (`ISdkResolver`, `INuGetHandler`, `IInputParser`, `ICompilati
 injected via constructor injection, enabling full replacement with fakes in tests:
 
 - **`FakeInputParser`**: returns `ProjectFileData` from in-memory fixtures without file I/O.
+  Uses `XmlDocument.parse` from `package:xml` internally when parsing real fixture strings.
 - **`FakeSdkResolver`**: returns a fixed set of assembly paths without probing the file system.
 - **`FakeNuGetHandler`**: returns pre-classified `NuGetResolveResult` without network access.
 - **`FakeCompilationBuilder`**: wraps real Roslyn `CSharpCompilation.Create` with in-memory

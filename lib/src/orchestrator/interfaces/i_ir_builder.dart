@@ -1,6 +1,8 @@
-import '../models/stage_results.dart';
+import '../../roslyn_frontend/models/frontend_result.dart';
+import '../models/stage_results.dart' hide FrontendResult;
 
-export '../models/stage_results.dart' show FrontendResult, IrBuildResult;
+export '../../roslyn_frontend/models/frontend_result.dart' show FrontendResult;
+export '../models/stage_results.dart' show IrBuildResult;
 
 /// The Orchestrator-facing interface for the IR_Builder stage.
 ///

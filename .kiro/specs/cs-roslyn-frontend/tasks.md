@@ -454,7 +454,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Tag `@Tags(['integration'])` for tests that spawn real processes
     - _Requirements: 16.7, 16.8, 16.9, 16.10_
 
-- [ ] 22. Checkpoint — Ensure all tests pass
+- [x] 22. Checkpoint — Ensure all tests pass
   - Run `dart test --exclude-tags integration` and confirm all non-integration tests pass
   - Run `dart run build_runner build` and confirm the worker binary is produced
   - Run `dart test --tags integration` if .NET 8 SDK is available

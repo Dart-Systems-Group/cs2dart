@@ -65,7 +65,7 @@ This document specifies the requirements for the **Configuration Service** of th
    - `bool get barrelFiles` — returns whether barrel export files are generated; default: false
    - `Map<String, String> get namespacePrefixAliases` — returns namespace prefix replacement map; default: empty map
    - `bool get autoResolveConflicts` — returns whether namespace conflicts are auto-resolved; default: false
-   - `EventStrategy get eventStrategy` — returns `stream` or `callback`; default: `stream`
+   - `EventStrategy get eventStrategy` — returns `stream`; default: `stream`
    - `Map<String, EventMappingOverride> get eventMappings` — returns per-event overrides; default: empty map
    - `Map<String, String> get packageMappings` — returns NuGet package name → Dart package name overrides; default: empty map (`package_mappings` in `transpiler.yaml`)
    - `String? get sdkPath` — returns explicit .NET SDK path override; default: null

@@ -10,7 +10,7 @@ Implement the `Config_Service` for the C# → Dart transpiler in Dart. The servi
   - Create `lib/src/config/models/` directory structure
   - Implement `DiagnosticSeverity` enum (`error`, `warning`, `info`)
   - Implement `LinqStrategy` enum (`preserveFunctional`, `lowerToLoops`) with YAML string mapping
-  - Implement `EventStrategy` enum (`stream`, `callback`) with YAML string mapping
+  - Implement `EventStrategy` enum (`stream`) with YAML string mapping
   - Implement `CaseStyle` enum (`pascalCase`, `camelCase`, `snakeCase`, `screamingSnakeCase`) with YAML string mapping
   - Implement `SourceLocation` final class with `filePath`, `line`, `column` and value equality
   - Implement `ConfigDiagnostic` final class with `severity`, `code`, `message`, `location` and value equality

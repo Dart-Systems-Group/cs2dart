@@ -284,7 +284,6 @@ enum LinqStrategy {
 
 enum EventStrategy {
   stream,    // YAML: "stream"
-  callback,  // YAML: "callback"
 }
 
 enum CaseStyle {

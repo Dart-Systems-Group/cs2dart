@@ -104,12 +104,13 @@ the Dart side only handles serialization, deserialization, and post-processing a
       `experimentalFeatures`) are serialized correctly
     - _Requirements: 1.6, 13.1_
 
-- [ ] 8. Implement `FrontendResult` deserialization
+- [x] 8. Implement `FrontendResult` deserialization
   - Create `lib/src/roslyn_frontend/serialization/frontend_result_deserializer.dart`
   - Implement `FrontendResult fromJson(Map<String, dynamic> json)` covering all fields of
     `FrontendResult`, `FrontendUnit`, `NormalizedSyntaxTree`, `SymbolTable`, `ResolvedSymbol`,
     `IrType` hierarchy, and all annotation types
   - Ensure no Roslyn types appear in the deserialized object graph
+  - Ask the user to make any updates to test/roslyn_frontend/serialization/frontend_result_deserializer_test.dart. Do not try to modify this file yourself.
   - _Requirements: 1.6, 14.3_
 
   - [ ]* 8.1 Write unit tests for `FrontendResult` deserialization
@@ -118,7 +119,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Test annotation types (`AsyncAnnotation`, `ForeachAnnotation`, etc.) deserialize correctly
     - _Requirements: 1.6, 14.3_
 
-- [ ] 9. Write property-based tests
+- [x] 9. Write property-based tests
 
   - [ ]* 9.1 Write property test for determinism — Property 1: Determinism
     - **Property 1: Determinism**
@@ -280,7 +281,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
       `IsOut`/`IsIn` flags
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [ ] 12. Write unit tests for unsupported construct handling
+- [-] 12. Write unit tests for unsupported construct handling
   - Test `unsafe` block produces `UnsupportedAnnotation` and emits `RF0005` Error
   - Test `fixed` statement produces `UnsupportedAnnotation` and emits `RF0005` Error
   - Test `stackalloc` produces `UnsupportedAnnotation` and emits `RF0005` Error
@@ -291,7 +292,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     semantically incomplete
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
 
-- [ ] 13. Write unit tests for diagnostics and error reporting
+- [~] 13. Write unit tests for diagnostics and error reporting
   - Test `RF`-prefixed diagnostic codes are in range `RF0001`–`RF9999`
   - Test duplicate diagnostics (same source location and code) are suppressed with `RF0012`
   - Test Roslyn `CS`-prefixed compiler diagnostics are propagated unchanged into
@@ -301,7 +302,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Test `RF0011` Warning is emitted for each project skipped due to upstream Error diagnostics
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
 
-- [ ] 14. Checkpoint — Ensure all tests pass
+- [~] 14. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 15. Write integration tests
@@ -348,7 +349,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
     - Tag `@Tags(['integration'])`
     - _Requirements: 9.6_
 
-- [ ] 16. Wire `RoslynFrontend` into the pipeline bootstrap
+- [~] 16. Wire `RoslynFrontend` into the pipeline bootstrap
   - Register `RoslynFrontend` (with `IInteropBridge` and `FrontendResultAssembler` dependencies)
     in `lib/src/pipeline_bootstrap.dart` so the `Orchestrator` can resolve `IRoslynFrontend`
   - Update `lib/src/orchestrator/interfaces/i_roslyn_frontend.dart` to re-export the full
@@ -356,7 +357,7 @@ the Dart side only handles serialization, deserialization, and post-processing a
   - Ensure `IConfigService` is passed through to `RoslynFrontend.process()` at call sites
   - _Requirements: 1.1, 1.3, 13.1_
 
-- [ ] 17. Final checkpoint — Ensure all tests pass
+- [~] 17. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass (excluding `@Tags(['integration'])` unless .NET 8 SDK and
     `cs2dart_roslyn_worker` binary are available), ask the user if questions arise.
 

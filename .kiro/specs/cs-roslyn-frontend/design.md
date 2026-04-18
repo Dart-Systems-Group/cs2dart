@@ -255,7 +255,8 @@ final class WorkerBinaryLocator {
   ///
   /// Search order:
   ///   1. Explicit [override] path (if provided).
-  ///   2. <packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe]
+  ///   2. Next to the executable named cs2dart_roslyn_worker[.exe]
+  ///   3. <packageRoot>/cs2dart_roslyn_worker/bin/cs2dart_roslyn_worker[.exe]
   ///
   /// Throws [InteropException] if the binary does not exist at the resolved path.
   static String resolve({String? override});

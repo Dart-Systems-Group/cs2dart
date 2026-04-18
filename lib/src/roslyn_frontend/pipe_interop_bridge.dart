@@ -140,8 +140,8 @@ final class PipeInteropBridge implements IInteropBridge {
   Future<void> _initPool() async {
     _poolInitialized = true;
 
-    // Resolve the binary path (async) before spawning any workers.
-    _resolvedBinaryPath = await WorkerBinaryLocator.resolve(
+    // Resolve the binary path before spawning any workers.
+    _resolvedBinaryPath = WorkerBinaryLocator.resolve(
       override: _workerBinaryPathOverride,
     );
 

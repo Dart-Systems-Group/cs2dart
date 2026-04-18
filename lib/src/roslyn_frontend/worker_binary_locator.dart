@@ -1,29 +1,29 @@
 import 'dart:io';
-import 'dart:isolate';
 
 import 'models/interop_exception.dart';
 
 /// Resolves the absolute path to the `cs2dart_roslyn_worker` binary at runtime.
 ///
 /// Search order:
-///   1. Explicit [override] path (if provided and the file exists).
-///   2. `<packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe]`
+///   1. Explicit [override] path (if provided).
+///   2. Next to the executable named cs2dart_roslyn_worker[.exe]
+///   3. <packageRoot>/cs2dart_roslyn_worker/bin/cs2dart_roslyn_worker[.exe]
 ///
 /// Throws [InteropException] if the binary does not exist at the resolved path.
 final class WorkerBinaryLocator {
   /// Returns the absolute path to the worker binary.
   ///
-  /// If [override] is non-null and the file at that path exists, it is
-  /// returned immediately without further resolution.
+  /// Search order:
+  ///   1. Explicit [override] path (if provided).
+  ///   2. Next to the executable named cs2dart_roslyn_worker[.exe]
+  ///   3. <packageRoot>/cs2dart_roslyn_worker/bin/cs2dart_roslyn_worker[.exe]
   ///
-  /// Otherwise the binary is expected at
-  /// `<packageRoot>/build/roslyn_worker/cs2dart_roslyn_worker[.exe]`,
-  /// where `<packageRoot>` is the directory containing the package's
-  /// `pubspec.yaml` file (resolved from the package configuration URI).
-  ///
-  /// Throws [InteropException] with a descriptive message if the binary
-  /// cannot be found at the resolved path.
-  static Future<String> resolve({String? override}) async {
+  /// Throws [InteropException] if the binary does not exist at the resolved path.
+  static String resolve({String? override}) {
+    final binaryName = Platform.isWindows
+        ? 'cs2dart_roslyn_worker.exe'
+        : 'cs2dart_roslyn_worker';
+
     // 1. Honour an explicit override if the file exists.
     if (override != null) {
       final overrideFile = File(override);
@@ -37,52 +37,38 @@ final class WorkerBinaryLocator {
       );
     }
 
-    // 2. Resolve relative to the package root.
-    final packageRoot = await _resolvePackageRoot();
-    final binaryName = Platform.isWindows
-        ? 'cs2dart_roslyn_worker.exe'
-        : 'cs2dart_roslyn_worker';
-    final binaryPath =
-        '$packageRoot/build/roslyn_worker/$binaryName';
+    // 2. Look next to the current executable.
+    final executableDir = File(Platform.resolvedExecutable).parent;
+    final siblingPath = '${executableDir.path}/$binaryName';
+    if (File(siblingPath).existsSync()) {
+      return siblingPath;
+    }
 
-    final binaryFile = File(binaryPath);
-    if (binaryFile.existsSync()) {
-      return binaryPath;
+    // 3. Resolve relative to the package root.
+    final packageRoot = _resolvePackageRoot();
+    final packageBinPath =
+        '$packageRoot/cs2dart_roslyn_worker/bin/$binaryName';
+    if (File(packageBinPath).existsSync()) {
+      return packageBinPath;
     }
 
     throw InteropException(
       message:
-          'Worker binary not found at: $binaryPath. '
-          'Run "dart run build_runner build" to compile the '
-          'cs2dart_roslyn_worker binary before using PipeInteropBridge.',
+          'Worker binary not found. Searched:\n'
+          '  (1) $siblingPath\n'
+          '  (2) $packageBinPath\n'
+          'Ensure the cs2dart_roslyn_worker binary has been built and is '
+          'available at one of the above locations.',
     );
   }
 
   /// Resolves the package root directory (the directory containing
-  /// `pubspec.yaml`) from the current package configuration URI.
+  /// `pubspec.yaml`) by walking up from the current script location.
   ///
-  /// Falls back to resolving relative to [Platform.script] if the package
-  /// configuration is unavailable.
-  static Future<String> _resolvePackageRoot() async {
-    // Attempt to use Isolate.packageConfig to find the package root.
-    // The package config URI typically points to
-    // `<packageRoot>/.dart_tool/package_config.json`.
-    final packageConfigUri = await Isolate.packageConfig;
-    if (packageConfigUri != null) {
-      // Navigate up from `.dart_tool/package_config.json` to the package root.
-      final packageConfigFile = File.fromUri(packageConfigUri);
-      // .dart_tool/ → package root
-      final packageRoot = packageConfigFile.parent.parent;
-      return packageRoot.path;
-    }
-
-    // Fallback: resolve relative to the current script.
-    // This handles cases where the isolate package config is unavailable
-    // (e.g., when running compiled AOT snapshots).
-    final scriptUri = Platform.script;
-    // Assume the script is somewhere inside the package; walk up until we
-    // find a directory containing pubspec.yaml.
-    var dir = File.fromUri(scriptUri).parent;
+  /// Throws [InteropException] if the package root cannot be determined.
+  static String _resolvePackageRoot() {
+    // Walk up from the current script until we find a pubspec.yaml.
+    var dir = File.fromUri(Platform.script).parent;
     for (var i = 0; i < 10; i++) {
       if (File('${dir.path}/pubspec.yaml').existsSync()) {
         return dir.path;
@@ -95,8 +81,7 @@ final class WorkerBinaryLocator {
     throw InteropException(
       message:
           'Could not determine the Dart package root. '
-          'Neither Isolate.packageConfig nor a pubspec.yaml ancestor '
-          'directory could be found. '
+          'No pubspec.yaml ancestor directory could be found. '
           'Provide an explicit workerBinaryPath to PipeInteropBridge.',
     );
   }

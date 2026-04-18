@@ -8,7 +8,7 @@ integrated stage that the pipeline orchestrator can consume.
 
 ## Tasks
 
-- [ ] 1. Define IR node data models and core interfaces
+- [x] 1. Define IR node data models and core interfaces
   - Create `lib/src/ir/models/` with all IR node sealed class hierarchies:
     - `IrNode` base, `IrDeclarationNode`, `IrStatementNode`, `IrExpressionNode`, `IrType`
     - All Declaration nodes: `CompilationUnitNode`, `NamespaceNode`, `ClassNode`, `StructNode`,
@@ -39,8 +39,8 @@ integrated stage that the pipeline orchestrator can consume.
   - Export all public symbols from `lib/src/ir/ir.dart`
   - _Requirements: 1.1–1.7, 2.1–2.2, 3.1, 10.1, 10.8_
 
-- [ ] 2. Implement `TypeResolver` and `SymbolResolver`
-  - [ ] 2.1 Implement `TypeResolver`
+- [x] 2. Implement `TypeResolver` and `SymbolResolver`
+  - [x] 2.1 Implement `TypeResolver`
     - Create `lib/src/ir/type_resolver.dart`
     - Map `ResolvedSymbol` type information to `IrType` nodes:
       - Primitive CLR types → `PrimitiveType`
@@ -54,7 +54,7 @@ integrated stage that the pipeline orchestrator can consume.
       - `void` → `VoidType`
     - _Requirements: 3.1–3.8_
 
-  - [ ] 2.2 Implement `SymbolResolver`
+  - [x] 2.2 Implement `SymbolResolver`
     - Create `lib/src/ir/symbol_resolver.dart`
     - Read `SymbolTable` entries from `Normalized_SyntaxTree` and produce `IrSymbol` nodes:
       - Copy `FullyQualifiedName`, `AssemblyName`, `Kind`, `SourceLocation`,

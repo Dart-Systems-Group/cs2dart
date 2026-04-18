@@ -4,23 +4,27 @@ targets:
       - lib/**
       - bin/**
       - test/**
-      - cs2dart_roslyn_worker/**
       - pubspec.*
       - $package$
+    dependencies:
+      - cs2dart:roslyn_worker_target
     builders:
       cs2dart|roslyn_worker:
+        enabled: false
+  roslyn_worker_target:
+    sources:
+      - cs2dart_roslyn_worker/**.cs
+      - cs2dart_roslyn_worker/**.csproj
+      - cs2dart_roslyn_worker/**.sln
+    builders:
+      cs2dart:roslyn_worker:
         enabled: true
         generate_for:
-          - cs2dart_roslyn_worker/**.cs
-          - cs2dart_roslyn_worker/cs2dart_roslyn_worker.csproj
-          - cs2dart_roslyn_worker/cs2dart_roslyn_worker.sln
-
+          - cs2dart_roslyn_worker/**.csproj
 builders:
   roslyn_worker:
     import: "package:cs2dart/src/build/roslyn_worker_builder.dart"
     builder_factories: ["roslynWorkerBuilder"]
     build_extensions:
-      ".cs": [".dotnet_published"]
       ".csproj": [".dotnet_published"]
-      ".sln": [".dotnet_published"]
     auto_apply: root_package

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:glob/glob.dart';
 
 import 'package:build/build.dart';
 
@@ -13,22 +14,20 @@ Builder roslynWorkerBuilder(BuilderOptions options) => RoslynWorkerBuilder();
 class RoslynWorkerBuilder implements Builder {
   @override
   Map<String, List<String>> get buildExtensions => {
-        '.cs': [
-          '.dotnet_published',
-        ],
+        // Only specify .csproj, so we run once per csproj.
         '.csproj': [
-          '.dotnet_published',
-        ],
-        '.sln': [
           '.dotnet_published',
         ],
       };
 
   @override
   Future<void> build(BuildStep buildStep) async {
-    if (!buildStep.inputId.path.endsWith('.csproj')) {
-      return;
+    // Read all .cs files so build system knows we depend on the file contents.
+    final csFiles = await buildStep.findAssets(Glob('**.cs')).toList();
+    for (final asset in [...csFiles, buildStep.inputId]) {
+      await buildStep.canRead(asset);
     }
+
     final rid = _runtimeIdentifier();
     final binary = _binaryName();
 
@@ -46,7 +45,7 @@ class RoslynWorkerBuilder implements Builder {
         '--self-contained',
         'true',
         '-o',
-        'cs2dart_roslyn_worker/bin/Release/net8.0/$rid',
+        'cs2dart_roslyn_worker/bin',
       ],
       runInShell: Platform.isWindows,
     );
@@ -58,7 +57,7 @@ class RoslynWorkerBuilder implements Builder {
       );
     }
 
-    final compiledPath = 'cs2dart_roslyn_worker/bin/Release/net8.0/$rid/$binary';
+    final compiledPath = 'cs2dart_roslyn_worker/$binary';
     log.info('dotnet publish succeeded. Binary: $compiledPath');
 
     // Write a synthetic asset so build_runner tracks the output.

@@ -12,7 +12,7 @@ try
     // Allocate a reusable 4-byte buffer for the length prefix.
     var lengthBuffer = new byte[4];
 
-    while (true)
+    while (true) 
     {
         // 1. Read 4-byte little-endian length prefix from stdin.
         int bytesRead = ReadExact(stdin, lengthBuffer, 0, 4);

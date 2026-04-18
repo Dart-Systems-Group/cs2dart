@@ -8,7 +8,7 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
 
 ## Tasks
 
-- [ ] 1. Define core data models and interfaces
+- [x] 1. Define core data models and interfaces
   - Create `lib/src/orchestrator/models/transpiler_options.dart` with the immutable
     `TranspilerOptions` value class (fields: `inputPath`, `outputDirectory`, `configPath`,
     `verbose`, `skipFormat`, `skipAnalyze` with documented defaults)
@@ -22,8 +22,8 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     `IConfigBootstrap` interface
   - _Requirements: 1.1, 1.2, 1.3, 3.1_
 
-- [ ] 2. Implement `OverrideConfigService` and `ConfigBootstrap`
-  - [ ] 2.1 Implement `OverrideConfigService` in
+- [x] 2. Implement `OverrideConfigService` and `ConfigBootstrap`
+  - [x] 2.1 Implement `OverrideConfigService` in
     `lib/src/orchestrator/override_config_service.dart`
     - Decorator around `IConfigService` that merges `_overrides` into `experimentalFeatures`
       while delegating all other getters to the wrapped instance
@@ -33,7 +33,7 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - **Property 9: SkipFormat / SkipAnalyze Propagation**
     - **Validates: Requirements 2.4, 2.5, 12.7, 12.8**
 
-  - [ ] 2.3 Implement `ConfigBootstrap` in `lib/src/orchestrator/config_bootstrap.dart`
+  - [x] 2.3 Implement `ConfigBootstrap` in `lib/src/orchestrator/config_bootstrap.dart`
     - Thin wrapper around `bootstrapPipeline()` from `pipeline_bootstrap.dart` implementing
       `IConfigBootstrap`
     - _Requirements: 2.1, 2.2, 2.3_
@@ -43,8 +43,8 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - Test that `ConfigBootstrap` delegates to `bootstrapPipeline()` correctly
     - _Requirements: 2.1, 2.4, 2.5_
 
-- [ ] 3. Implement `OutputPathAssigner`
-  - [ ] 3.1 Implement `OutputPathAssigner` in
+- [x] 3. Implement `OutputPathAssigner`
+  - [x] 3.1 Implement `OutputPathAssigner` in
     `lib/src/orchestrator/output_path_assigner.dart`
     - Implement `static String toSnakeCase(String projectName)` following the six-step
       algorithm in the design (insert `_` before uppercase transitions, replace `.`/`-`/spaces,
@@ -68,11 +68,11 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - Test absolute path resolution for relative `outputDirectory`
     - _Requirements: 6.1, 6.4, 6.6_
 
-- [ ] 4. Checkpoint — Ensure all tests pass
+- [x] 4. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement `DiagnosticRenderer`
-  - [ ] 5.1 Implement `DiagnosticRenderer` in
+- [x] 5. Implement `DiagnosticRenderer`
+  - [x] 5.1 Implement `DiagnosticRenderer` in
     `lib/src/orchestrator/diagnostic_renderer.dart`
     - Implement `static String format(Diagnostic d)` producing
       `<severity> <CODE>: <MESSAGE> [<SOURCE>:<LINE>:<COLUMN>]` with bracket omission rules
@@ -90,46 +90,46 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - Test silent clean-run behavior (no output when `verbose=false`, `success=true`, no warnings)
     - _Requirements: 8.1, 8.2, 8.3, 8.6, 8.7, 8.8_
 
-- [ ] 6. Implement `DirectoryManager`
+- [x] 6. Implement `DirectoryManager`
   - Create `lib/src/orchestrator/directory_manager.dart` with a `DirectoryManager` class
   - Implement `Future<bool> ensureExists(String path)` that creates the directory (including
     intermediates) and returns `false` on failure
   - _Requirements: 6.2, 6.3_
 
-- [ ] 7. Implement the `Orchestrator`
-  - [ ] 7.1 Create `lib/src/orchestrator/orchestrator.dart` with the `Orchestrator` class
+- [x] 7. Implement the `Orchestrator`
+  - [x] 7.1 Create `lib/src/orchestrator/orchestrator.dart` with the `Orchestrator` class
     - Constructor accepts all injected dependencies (`IProjectLoader`, `IRoslynFrontend`,
       `IIrBuilder`, `IDartGenerator`, `IValidator`, `IConfigBootstrap`, `OutputPathAssigner`,
       `DirectoryManager`)
     - _Requirements: 1.1, 1.3_
 
-  - [ ] 7.2 Implement options validation in `transpile()`
+  - [x] 7.2 Implement options validation in `transpile()`
     - Return early with `OR0002` when `inputPath` is empty
     - Return early with `OR0003` when `outputDirectory` is empty
     - No stage is invoked for invalid options
     - _Requirements: 1.5, 1.6_
 
-  - [ ] 7.3 Implement config bootstrapping and override application in `transpile()`
+  - [x] 7.3 Implement config bootstrapping and override application in `transpile()`
     - Call `IConfigBootstrap.load()` first
     - Apply `OverrideConfigService` when `skipFormat` or `skipAnalyze` is true via
       `_applyOverrides()`
     - Early-exit with CFG diagnostics + `OR0005` when config has errors
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-  - [ ] 7.4 Implement stage wiring and early-exit logic in `transpile()`
+  - [x] 7.4 Implement stage wiring and early-exit logic in `transpile()`
     - Invoke stages in fixed order: `ProjectLoader` → `RoslynFrontend` → `IrBuilder` →
       `DartGenerator`
     - Apply early-exit check after each stage (`success=false AND empty collection`)
     - Emit `OR0005` Info diagnostic on each early exit identifying the triggering stage
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.1–4.11_
 
-  - [ ] 7.5 Implement output path assignment and directory creation in `transpile()`
+  - [x] 7.5 Implement output path assignment and directory creation in `transpile()`
     - Call `OutputPathAssigner.assign()` after `DartGenerator`
     - Call `DirectoryManager.ensureExists()` and emit `OR0004` + early-exit on failure
     - Pass the updated `GenResult` to `Validator`
     - _Requirements: 3.7, 6.1, 6.2, 6.3, 6.5, 6.6_
 
-  - [ ] 7.6 Implement exception wrapping for all stage calls
+  - [x] 7.6 Implement exception wrapping for all stage calls
     - Wrap each stage invocation in `try/catch`
     - Emit `OR0001` Error diagnostic with stage name and exception message on any unhandled throw
     - Perform early-exit; never re-throw
@@ -171,18 +171,18 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - **Property 13: Shared IConfigService Instance**
     - **Validates: Requirements 2.7**
 
-- [ ] 8. Checkpoint — Ensure all tests pass
+- [x] 8. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Create stage fakes for testing
+- [x] 9. Create stage fakes for testing
   - Create `test/orchestrator/fakes/fake_project_loader.dart`,
     `fake_roslyn_frontend.dart`, `fake_ir_builder.dart`, `fake_dart_generator.dart`,
     `fake_validator.dart`, `fake_config_bootstrap.dart`
   - Each fake records whether it was called and returns a pre-configured result
   - _Requirements: 1.3_
 
-- [ ] 10. Write `Orchestrator` unit tests
-  - [ ] 10.1 Write unit tests for `Orchestrator` in `test/orchestrator/orchestrator_test.dart`
+- [x] 10. Write `Orchestrator` unit tests
+  - [x] 10.1 Write unit tests for `Orchestrator` in `test/orchestrator/orchestrator_test.dart`
     - Test `TranspilerOptions` field defaults
     - Test stage invocation order using call-recording fakes
     - Test `ConfigBootstrap` is called before any stage
@@ -199,18 +199,18 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - Verify `ConfigPath` override bypasses directory search
     - _Requirements: 2.2, 2.3, 6.2, 10.1–10.5_
 
-- [ ] 11. Implement `OrchestratorFactory` and create `lib/src/orchestrator/orchestrator.dart` barrel export
+- [x] 11. Implement `OrchestratorFactory` and create `lib/src/orchestrator/orchestrator.dart` barrel export
   - Implement `OrchestratorFactory.create()` in
     `lib/src/orchestrator/orchestrator_factory.dart` wiring all production stage instances
   - Create `lib/src/orchestrator/orchestrator_exports.dart` (or update `lib/cs2dart.dart`) to
     export `Orchestrator`, `TranspilerOptions`, `TranspilerResult`
   - _Requirements: 1.1, 1.3_
 
-- [ ] 12. Implement `CliRunner` and `bin/cs2dart.dart`
-  - [ ] 12.1 Add the `args` package to `pubspec.yaml` if not already present
+- [x] 12. Implement `CliRunner` and `bin/cs2dart.dart`
+  - [x] 12.1 Add the `args` package to `pubspec.yaml` if not already present
     - _Requirements: 7.1_
 
-  - [ ] 12.2 Implement `CliRunner` in `lib/src/orchestrator/cli_runner.dart`
+  - [x] 12.2 Implement `CliRunner` in `lib/src/orchestrator/cli_runner.dart`
     - Build `ArgParser` with all flags/options from the design
     - Implement `Future<int> run(List<String> args)` following the parsing flow:
       handle `ArgParserException`, `--help`, missing positional, missing `--output`,
@@ -218,7 +218,7 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
       `DiagnosticRenderer.renderAll()`, return exit code
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
 
-  - [ ] 12.3 Create `bin/cs2dart.dart` entry point
+  - [x] 12.3 Create `bin/cs2dart.dart` entry point
     - Instantiate `OrchestratorFactory.create()`, wrap in `CliRunner`, call `run(args)`,
       pass result to `exit()`
     - _Requirements: 7.1_
@@ -231,7 +231,7 @@ and exposing both a programmatic API and a `cs2dart` CLI entry point.
     - Test exit code `0` on `success=true`, `1` on `success=false`
     - _Requirements: 7.2, 7.3, 7.4, 7.6, 7.7, 7.8_
 
-- [ ] 13. Final checkpoint — Ensure all tests pass
+- [x] 13. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

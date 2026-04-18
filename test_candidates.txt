@@ -1,0 +1,33 @@
+Here are C# projects well-suited for testing the transpiler, organized by what they exercise:
+
+Tier 1 — Small, focused, high signal
+
+Humanizer — pure C# string/enum manipulation library, no native deps, heavy use of extension methods, generics, and attributes. Great for namespace mapping and struct/enum coverage.
+FluentValidation — interfaces, generics, expression trees, and a clean NuGet package graph. Also exercises the Tier 1 NuGet mapping for FluentValidation itself.
+Polly — async/await heavy, generics, delegates, and events. Good stress test for the async pipeline.
+NodaTime — structs, value types, operator overloading, and extensive xUnit test suite. Exercises struct mapping and test generation together.
+Tier 2 — Medium complexity, real-world patterns
+
+MediatR — interfaces, generics, DI abstractions (Microsoft.Extensions.DependencyInjection), and a small NuGet graph. Tests Tier 1 DI mapping.
+AutoMapper — expression trees, reflection-heavy, generics. Will produce UnsupportedNode diagnostics for reflection paths — useful for validating diagnostic output.
+Newtonsoft.Json — a Tier 1 mapped package itself, but its source is a good Tier 2 transpilation target. Tests the recursive Tier 2 pipeline.
+Tier 3 — Multi-project solutions
+
+eShopOnContainers — large .sln with many projects, mixed TFMs, and a wide NuGet graph including Tier 3 packages. Best for end-to-end pipeline stress testing and the dependency report.
+OrchardCore — modular architecture, lots of Directory.Packages.props (CPM), and a mix of all three NuGet tiers. Directly exercises the CPM parsing path in the NuGet handler.
+Tier 4 — Targeted edge cases
+
+Scenario	Project
+Central Package Management	Any project using Directory.Packages.props — OrchardCore is the best example
+Floating versions (1.2.*)	Older ASP.NET projects
+PrivateAssets="all" (dev deps)	Any project using coverlet, Moq, or xunit.runner.visualstudio
+Mixed test frameworks	Projects with both xUnit and NUnit (rare but valid)
+Nullable disabled	Legacy .NET Framework projects
+P/Invoke / unsafe	System.Drawing wrappers — triggers NR0011 warnings
+Recommended starting set (covers the end-to-end test scenarios from Testing Requirement 8.3):
+
+A hand-crafted minimal .csproj with no NuGet deps — baseline
+A two-project .sln where one references the other — inter-project reference path
+Humanizer — Tier 1 NuGet deps, clean source
+NodaTime — Tier 1 deps + xUnit test suite (exercises test generation)
+eShopOnContainers (one bounded context, not the whole thing) — Tier 3 stubs + dependency report

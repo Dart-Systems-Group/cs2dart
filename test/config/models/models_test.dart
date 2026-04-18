@@ -47,20 +47,13 @@ void main() {
       expect(EventStrategy.stream.yamlValue, 'stream');
     });
 
-    test('callback has correct YAML value', () {
-      expect(EventStrategy.callback.yamlValue, 'callback');
-    });
-
     test('fromYaml returns stream for "stream"', () {
       expect(EventStrategy.fromYaml('stream'), EventStrategy.stream);
     });
 
-    test('fromYaml returns callback for "callback"', () {
-      expect(EventStrategy.fromYaml('callback'), EventStrategy.callback);
-    });
-
     test('fromYaml returns null for unrecognized value', () {
       expect(EventStrategy.fromYaml('unknown'), isNull);
+      expect(EventStrategy.fromYaml('callback'), isNull);
     });
 
     test('round-trip: yamlValue -> fromYaml returns original', () {

@@ -119,7 +119,7 @@ module boundaries.
 #### Acceptance Criteria
 
 1. THE IR serialization round-trip property (IR Requirement 16.3) SHALL be tested with a PBT suite
-   that generates arbitrary valid IR trees, serializes them via the Pretty_Printer, parses the
+   that generates arbitrary valid IR trees, serializes them via the IR_Serializer, parses the
    output, and asserts structural equality with the original.
 2. THE Config_Service round-trip property (Config Requirement 2.6) SHALL be tested with a PBT suite
    that generates arbitrary valid `transpiler.yaml` content, parses it, serializes the resulting
@@ -146,7 +146,7 @@ tested, so that errors and warnings are always structured, stable, and actionabl
    and only if the diagnostics list contains no `Error`-severity entry.
 4. Diagnostic code ranges SHALL be tested to ensure no two modules emit diagnostics with the same
    prefix: `PL` (Project_Loader), `IR` (IR_Builder), `CG` (Dart_Generator), `NR` (NuGet_Handler),
-   `VA` (Validation), `CFG` (Config_Service).
+   `VA` (Validation), `CFG` (Config_Service), `RC` (Result_Collector), `OR` (Pipeline_Orchestrator).
 5. EVERY module SHALL have a test asserting that diagnostics are aggregated into the result object
    and NOT written to standard output or thrown as exceptions.
 
@@ -183,7 +183,7 @@ across modules use consistent, well-understood inputs rather than duplicating fi
 
 1. THE test suite SHALL maintain a `fixtures/` directory at the repository root containing:
    - `csharp/` — C# source files and `.csproj` files covering every supported language feature
-   - `ir/` — serialized IR trees (Pretty_Printer output) for every fixture C# file
+   - `ir/` — serialized IR trees (JSON files produced by the IR_Serializer) for every fixture C# file
    - `dart/` — expected Dart output (golden files) for every fixture C# file
    - `configs/` — `transpiler.yaml` files covering every Config_Section and edge case
 2. EVERY fixture SHALL be named descriptively (e.g., `async_method_with_cancellation_token.cs`) and
@@ -242,8 +242,9 @@ correctness for every documented invariant.
    `Success` flag correctness (Project_Loader Requirement 7.3).
 3. THE IR_Builder test suite SHALL include PBT properties for: declaration count preservation
    (IR Requirement 16.1), determinism (IR Requirement 16.2), round-trip (IR Requirement 16.3),
-   well-formedness (IR Requirement 16.4), return statement preservation (IR Requirement 16.5), and
-   type fidelity (IR Requirement 16.6).
+   well-formedness (IR Requirement 16.4), return statement preservation (IR Requirement 16.5),
+   type fidelity (IR Requirement 16.6), constant fidelity (IR Requirement 16.7), and partial
+   merge attribute count preservation (IR Requirement 16.8).
 4. THE Dart_Generator test suite SHALL include PBT properties for: determinism (Dart_Generator
    Requirement 14.1), file count preservation (Dart_Generator Requirement 14.2), declaration count
    preservation (Dart_Generator Requirement 14.3), async fidelity (Dart_Generator Requirement 14.4),

@@ -95,6 +95,11 @@ This document specifies the requirements for the **NuGet dependency handling** s
    | `System.Reactive` (Rx.NET) | `rxdart` (pub.dev) |
    | `FluentValidation` | generated validation stub |
 
+   > **`System.Text.Json` classification note:** `System.Text.Json` is inbox BCL on `net5.0`+ but a standalone NuGet package on `netstandard2.x` and `net4x`. The NuGet_Handler SHALL apply TFM-conditional classification:
+   > - WHEN `Project_Entry.TargetFramework` is `net5.0` or later AND no explicit `<PackageReference>` for `System.Text.Json` is present in the project file, THE NuGet_Handler SHALL synthesize a virtual Tier_1 BCL entry (mapping to `dart:convert`) without adding a `pubspec.yaml` dependency entry, since `dart:convert` is always available.
+   > - WHEN `Project_Entry.TargetFramework` is `netstandard2.x`, `net4x`, or any pre-`net5.0` TFM, OR when an explicit `<PackageReference>` for `System.Text.Json` is present regardless of TFM, THE NuGet_Handler SHALL classify it as a regular Tier_1 NuGet package via the Mapping_Registry and add the `dart:convert` mapping to `pubspec.yaml` as normal.
+   > This ensures `System.Text.Json` never appears in both the BCL synthetic path and the NuGet package path simultaneously for the same project.
+
 2. WHEN a Tier_1 package is resolved, THE NuGet_Handler SHALL add the corresponding Dart package and version constraint to the `dependencies` section of `pubspec.yaml`.
 3. WHEN a Tier_1 mapping includes an API_Shim, THE NuGet_Handler SHALL emit the shim Dart file into `lib/src/shims/` and add the necessary `import` statements to transpiled files that reference the mapped package's types.
 4. WHEN a Tier_1 package version falls outside the mapping's supported version range, THE NuGet_Handler SHALL emit a diagnostic warning and apply the mapping anyway, noting the version mismatch.
@@ -184,8 +189,12 @@ This document specifies the requirements for the **NuGet dependency handling** s
 #### Acceptance Criteria
 
 1. THE NuGet_Handler SHALL produce the content of `dependency_report.md` as a string conforming
-   to the following schema and place it in `Dart_Package.DependencyReportContent`; the
-   Result_Collector is responsible for writing this string to disk. The schema is:
+   to the following schema and place it in `Dart_Package.DependencyReportContent`. This field is
+   carried through the pipeline unchanged: the NuGet_Handler sets it on the `Project_Entry`
+   during `Project_Loader` execution; the IR_Builder and Dart_Generator propagate it forward
+   through `IR_Build_Result` and `Gen_Result` respectively; the Result_Collector reads it from
+   `Dart_Package.DependencyReportContent` and writes it to disk as `dependency_report.md`. The
+   Result_Collector owns the write; the NuGet_Handler owns the content. The schema is:
 
    **Required sections (in order):**
 
@@ -236,7 +245,7 @@ This document specifies the requirements for the **NuGet dependency handling** s
 
 #### Acceptance Criteria
 
-1. THE Mapping_Config SHALL support a `nuget_feed` key specifying the NuGet feed URL (defaults to `https://api.nuget.org/v3/index.json`).
+1. THE Mapping_Config SHALL support a `nuget_feeds` key (list of strings) specifying the NuGet feed URLs to query in order before falling back to `nuget.org`; this key corresponds to `IConfigService.nugetFeedUrls` as defined in the Transpiler Configuration specification (YAML key: `nuget_feeds`). When absent, the default is `["https://api.nuget.org/v3/index.json"]`.
 2. THE Mapping_Config SHALL support a `nuget_cache_path` key specifying a local directory to use as the NuGet package cache.
 3. THE Mapping_Config SHALL support a `tier2_source_paths` key: a list of local directory paths where Tier_2 package source trees can be found, searched in order before attempting network download.
 4. THE Mapping_Config SHALL support a `exclude_packages` list: packages in this list SHALL be excluded from the Package_Graph entirely and SHALL NOT appear in `pubspec.yaml` or generate stubs.
@@ -246,7 +255,7 @@ This document specifies the requirements for the **NuGet dependency handling** s
 
 ---
 
-### Requirement 13: Roslyn Compilation Preparation Contract
+### Requirement 12: Roslyn Compilation Preparation Contract
 
 **User Story:** As a pipeline integrator, I want the NuGet_Handler to fully prepare the Roslyn Compilation before the IR_Builder runs, so that the IR_Builder receives a fully-bound Compilation with no unresolved external references.
 
@@ -255,13 +264,13 @@ This document specifies the requirements for the **NuGet dependency handling** s
 1. THE NuGet_Handler SHALL add a metadata reference (`.dll` assembly) to the Roslyn `Compilation` for every Tier_1 package in the resolved Package_Graph before the `Compilation` is passed to the IR_Builder.
 2. THE NuGet_Handler SHALL add all C# `SyntaxTree` objects from Tier_2 package sources to the Roslyn `Compilation` before the `Compilation` is passed to the IR_Builder, so that Tier_2 types are fully resolvable by Roslyn's `SemanticModel`.
 3. THE NuGet_Handler SHALL NOT add any source or metadata to the Roslyn `Compilation` for Tier_3 packages; references to Tier_3 types SHALL appear as binding errors in the `SemanticModel`, causing the IR_Builder to emit `UnresolvedSymbol` nodes per IR Requirement 2.5.
-4. THE NuGet_Handler SHALL annotate each entry in `Load_Result.PackageReferences` with its resolved `Tier` (1, 2, or 3) and its `DartMapping` (nullable) before the `Load_Result` is passed to the IR_Builder, so that downstream stages can determine the correct Dart output strategy from the IR alone without re-consulting the Mapping_Registry.
+4. THE NuGet_Handler SHALL annotate each `PackageReferences` entry on the corresponding `Project_Entry` (within `Load_Result.Projects`) with its resolved `Tier` (1, 2, or 3) and its `DartMapping` (nullable) before the `Load_Result` is passed to the IR_Builder, so that downstream stages can determine the correct Dart output strategy from the IR alone without re-consulting the Mapping_Registry.
 5. WHEN a Tier_1 assembly cannot be located in the local NuGet cache or configured feed, THE NuGet_Handler SHALL emit a diagnostic error and downgrade the package to Tier_3, ensuring the IR_Builder still receives a processable (if incomplete) `Compilation`.
 6. THE NuGet_Handler SHALL complete all Compilation preparation steps before invoking the IR_Builder; it SHALL NOT modify the `Compilation` or `Load_Result` after the IR_Builder has started processing.
 
 ---
 
-### Requirement 14: IR Symbol to Dart Output Mapping Contract
+### Requirement 13: IR Symbol to Dart Output Mapping Contract
 
 **User Story:** As a Dart code generator author, I want every external IR_Symbol to carry enough information to determine the correct Dart import and type name, so that I can emit correct Dart code for NuGet-sourced types without consulting the Mapping_Registry at code generation time.
 
@@ -275,7 +284,7 @@ This document specifies the requirements for the **NuGet dependency handling** s
 
 ---
 
-### Requirement 12: Correctness Properties for Property-Based Testing
+### Requirement 14: Correctness Properties for Property-Based Testing
 
 **User Story:** As a transpiler test engineer, I want well-defined correctness properties for the NuGet_Handler, so that I can write property-based tests that catch regressions across a wide range of project configurations.
 

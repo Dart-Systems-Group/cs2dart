@@ -22,8 +22,8 @@ without any further knowledge of C# syntax or Roslyn APIs.
 - **IR_Symbol**: A stable, fully-qualified identifier for a named entity (type, method, field, etc.).
 - **Roslyn_Model**: The Roslyn `SemanticModel` and `SyntaxTree` pair provided as input to this stage.
 - **Lowered_Form**: A simplified IR representation of a high-level C# construct (e.g., LINQ lowered to loops).
-- **Pretty_Printer**: The component that serializes an IR tree to a canonical, human-readable text format.
-- **Round_Trip**: The property that parsing a Pretty_Printer output reproduces an equivalent IR tree.
+- **IR_Serializer**: The component that serializes an IR tree to a canonical JSON representation.
+- **Round_Trip**: The property that parsing an IR_Serializer JSON output reproduces an equivalent IR tree.
 - **IR_Validator**: The component that checks structural and semantic invariants on a completed IR tree.
 - **Semantic_Fidelity**: The guarantee that the IR preserves the observable behavior of the source C# program.
 - **Determinism**: The guarantee that the same Roslyn_Model input always produces the same IR output.
@@ -38,7 +38,8 @@ without any further knowledge of C# syntax or Roslyn APIs.
 - **SymbolTable**: A dictionary mapping every `SyntaxNode` carrying a named reference to its `ResolvedSymbol` record, populated by the Roslyn_Frontend before handoff.
 - **ResolvedSymbol**: A plain-data record (no Roslyn types) containing `FullyQualifiedName`, `AssemblyName`, `Kind`, `SourcePackageId` (nullable), `SourceLocation` (nullable), and `ConstantValue` (nullable). Full schema defined in the Roslyn Frontend specification.
 - **Attribute_Node**: A Declaration IR node representing a single C# attribute application. Carries `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of the `Attribute_Target` enum values), and `SourceLocation`. Defined fully in Requirement 1.3.
-- **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
+- **Attribute_Target**: The syntactic location to which an attribute is applied. One of: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`.
+- **Synthesized_Attribute**: A C# attribute injected by the compiler into the `SemanticModel` with no corresponding syntax in any source file, identified by `AttributeData.ApplicationSyntaxReference == null`. Examples: `[CompilerGenerated]` on async state-machine types, `[IteratorStateMachine]` on iterator methods. The Roslyn_Frontend excludes these at the extraction boundary (RF Requirement 10.6); they never appear in the `Normalized_SyntaxTree` and therefore never produce an `Attribute_Node` in the IR.
 
 ---
 
@@ -54,7 +55,7 @@ so that I can write a complete, switch-exhaustive visitor without handling raw C
 1. THE IR_Builder SHALL represent every C# construct supported by the transpiler as exactly one IR_Node subtype.
 2. THE IR SHALL organize nodes into four top-level categories: **Declarations**, **Statements**, **Expressions**, and **Types**.
 3. THE IR SHALL include the following Declaration node types: `CompilationUnit`, `Namespace`, `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Destructor`, `Property`, `Field`, `Event`, `Delegate`, `TypeParameter`, `Parameter`, `LocalFunction`, `Attribute_Node`.
-   - `Attribute_Node` carries: `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of `Class`, `Struct`, `Interface`, `Enum`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`), and `SourceLocation`.
+   - `Attribute_Node` carries: `FullyQualifiedName` (string), `ShortName` (string), `PositionalArguments` (ordered list of IR expression nodes), `NamedArguments` (ordered list of `{ Name: string, Value: IR expression node }` pairs), `Target` (one of `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Parameter`, `ReturnValue`, `Assembly`, `Module`), and `SourceLocation`.
    - `Attribute_Node` instances are attached as a list on every Declaration node type that can carry C# attributes: `Class`, `Struct`, `Interface`, `Enum`, `EnumMember`, `Method`, `Constructor`, `Property`, `Field`, `Event`, `Delegate`, `Parameter`; and on `CompilationUnit` for assembly-level and module-level attributes.
 4. THE IR SHALL include the following Statement node types: `Block`, `ExpressionStatement`, `ReturnStatement`, `IfStatement`, `WhileStatement`, `ForStatement`, `ForEachStatement`, `SwitchStatement`, `SwitchCase`, `BreakStatement`, `ContinueStatement`, `ThrowStatement`, `TryCatchStatement`, `CatchClause`, `FinallyClause`, `LocalDeclaration`, `YieldReturnStatement`, `YieldBreakStatement`.
 5. THE IR SHALL include the following Expression node types: `Literal`, `Identifier`, `BinaryExpression`, `UnaryExpression`, `AssignmentExpression`, `ConditionalExpression`, `InvocationExpression`, `MemberAccessExpression`, `ElementAccessExpression`, `ObjectCreationExpression`, `ArrayCreationExpression`, `CastExpression`, `IsExpression`, `AsExpression`, `LambdaExpression`, `AnonymousObjectCreation`, `TupleExpression`, `SwitchExpression`, `ThrowExpression`, `AwaitExpression`, `InterpolatedString`, `NullCoalescingExpression`, `NullConditionalExpression`.
@@ -249,27 +250,27 @@ identical input on every run, so that build caches and golden-file tests remain 
 #### Acceptance Criteria
 
 1. THE IR_Builder SHALL produce identical IR trees for identical `Compilation` inputs regardless of the order in which `SemanticModel` queries are issued internally.
-2. THE IR_Builder SHALL sort all collections within IR nodes (e.g., interface lists, attribute lists) in a canonical order (alphabetical by fully-qualified name) when the source order is not semantically significant.
+2. THE IR_Builder SHALL sort all collections within IR nodes (e.g., interface lists, attribute lists) in a canonical order when the source order is not semantically significant. The canonical order is: primary sort by fully-qualified name (alphabetical, lexicographic); secondary sort by source file path (alphabetical, lexicographic); tertiary sort by line number (ascending). This three-level tie-breaker applies in particular to assembly-level and module-level `Attribute_Node` lists, where the same attribute type (e.g., `[assembly: InternalsVisibleTo(...)]`) may appear in multiple source files and the FQN alone does not produce a unique ordering. See also Attribute → Annotation Mapping Requirement 2.1, which states the same rule for `Attribute_Node` lists specifically.
 3. THE IR_Builder SHALL not use hash-based data structures whose iteration order is non-deterministic (e.g., `Dictionary<K,V>` without sorted enumeration) when building ordered IR collections.
 4. THE IR_Builder SHALL not embed timestamps, process IDs, or other environment-dependent values in IR nodes.
 5. FOR ALL valid C# compilations, running THE IR_Builder twice on the same input SHALL produce IR trees that are structurally and value-equal.
 
 ---
 
-### Requirement 13: IR Serialization and Pretty Printing
+### Requirement 13: IR Serialization
 
 **User Story:** As a developer debugging the transpiler, I want to serialize and deserialize IR trees
-to a stable text format, so that I can inspect IR output, write golden tests, and verify round-trip
+to a stable JSON format, so that I can inspect IR output, write golden tests, and verify round-trip
 correctness.
 
 #### Acceptance Criteria
 
-1. THE Pretty_Printer SHALL serialize any IR tree to a deterministic, human-readable text representation.
-2. THE Pretty_Printer SHALL produce output where every IR_Node type, every field name, and every IR_Type is explicitly named (no implicit or positional encoding).
-3. THE IR_Builder SHALL provide a parser that reads Pretty_Printer output and reconstructs an equivalent IR tree.
-4. FOR ALL valid IR trees, parsing the Pretty_Printer output SHALL produce an IR tree that is structurally and value-equal to the original (round-trip property).
-5. THE Pretty_Printer SHALL format IR trees consistently: one node per line, indented by nesting depth, with field names preceding values.
-6. WHEN the Pretty_Printer encounters an `UnsupportedNode` or `UnresolvedSymbol`, THE Pretty_Printer SHALL include the diagnostic message and source span in the serialized output.
+1. THE IR_Serializer SHALL serialize any IR tree to a deterministic, human-readable JSON representation.
+2. THE IR_Serializer SHALL produce output where every IR_Node type, every field name, and every IR_Type is explicitly named (no implicit or positional encoding).
+3. THE IR_Builder SHALL provide a parser that reads IR_Serializer JSON output and reconstructs an equivalent IR tree.
+4. FOR ALL valid IR trees, parsing the IR_Serializer JSON output SHALL produce an IR tree that is structurally and value-equal to the original (round-trip property).
+5. THE IR_Serializer SHALL format IR trees as valid, pretty-printed JSON: fields use camelCase keys, arrays preserve order, and null fields are omitted.
+6. WHEN the IR_Serializer encounters an `UnsupportedNode` or `UnresolvedSymbol`, THE IR_Serializer SHALL include the diagnostic message and source span in the serialized JSON output.
 
 ---
 
@@ -321,9 +322,9 @@ C# inputs.
 
 1. FOR ALL valid C# compilations, THE IR_Builder SHALL produce an IR tree where the count of top-level Declaration nodes equals the count of top-level type declarations in the source (invariant: declaration count preservation).
 2. FOR ALL valid C# compilations, running THE IR_Builder twice SHALL produce structurally equal IR trees (determinism property).
-3. FOR ALL valid IR trees, THE Pretty_Printer output parsed by the IR parser SHALL produce a structurally equal IR tree (round-trip property).
+3. FOR ALL valid IR trees, THE IR_Serializer JSON output parsed by the IR parser SHALL produce a structurally equal IR tree (round-trip property).
 4. FOR ALL valid IR trees, applying THE IR_Validator SHALL produce zero violations (well-formedness invariant for IR_Builder output).
 5. FOR ALL C# method bodies, the count of `ReturnStatement` IR nodes in the lowered IR SHALL be greater than or equal to the count of `return` statements in the original source (lowering may introduce additional returns, but SHALL NOT remove any).
 6. FOR ALL C# expressions, the IR_Type attached to the IR expression node SHALL be equal to the type reported by the Roslyn `SemanticModel` for the corresponding syntax node (type fidelity property).
 7. FOR ALL C# `const` declarations, the literal value in the IR `Field` node SHALL equal the compile-time constant value reported by Roslyn (constant fidelity property).
-8. FOR ALL `Frontend_Unit` inputs containing a `partial` class whose parts collectively carry `N` total `Attribute_Node` instances across all parts (on the class itself or on any member), the merged `Class` IR_Node and its member IR_Nodes SHALL together carry exactly `N` `Attribute_Node` instances — no attribute application from any partial part SHALL be dropped (partial merge attribute count preservation property).
+8. FOR ALL `Frontend_Unit` inputs containing a `partial` class whose parts collectively carry `N` total `Attribute_Node` instances across all parts (on the class itself or on any member), the merged `Class` IR_Node and its member IR_Nodes SHALL together carry exactly `N` `Attribute_Node` instances — no attribute application from any partial part SHALL be dropped (partial merge attribute count preservation property). Because the Roslyn_Frontend excludes compiler-synthesized attributes at the extraction boundary per RF Requirement 10.6, `N` counts only source-declared attributes; synthesized attributes are not present in the `Normalized_SyntaxTree` and are not counted.

@@ -116,7 +116,7 @@ All pipeline stages after IR ingestion are implemented in Dart because:
 | **Config Service** | Loads `transpiler.yaml`; exposes `IConfigService` to all pipeline modules |
 | **Namespace Mapper** | Maps C# namespaces to Dart library paths using IR + config |
 | **Struct Transpiler** | Converts IR struct nodes to immutable Dart value classes |
-| **Event Transpiler** | Converts IR event nodes to Dart streams or callbacks |
+| **Event Transpiler** | Converts IR event nodes to Dart streams |
 | **NuGet Dependency Handler** | Maps NuGet packages to Dart pub packages; optionally transpiles package source |
 | **Dart Code Generator** | Emits `.dart` source files from the transformed IR |
 | **Validation & Analysis** | Runs `dart analyze` on generated output; reports diagnostics |

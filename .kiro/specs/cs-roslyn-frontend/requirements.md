@@ -360,9 +360,16 @@ without parsing attribute syntax.
 4. WHEN an attribute is not in the supported set, THE Roslyn_Frontend SHALL attach it as an
    `UnknownAttribute` record carrying the attribute's fully-qualified name and raw argument text,
    and SHALL emit an `RF`-prefixed `Info` diagnostic.
-5. THE Roslyn_Frontend SHALL NOT discard any attribute silently; every attribute on every
-   declaration SHALL appear in the `Normalized_SyntaxTree` either as a structured record or as an
-   `UnknownAttribute`.
+5. THE Roslyn_Frontend SHALL NOT discard any source-declared attribute silently; every attribute on
+   every declaration whose `AttributeData.ApplicationSyntaxReference` is non-null SHALL appear in
+   the `Normalized_SyntaxTree` either as a structured record or as an `UnknownAttribute`.
+6. THE Roslyn_Frontend SHALL exclude any `AttributeData` instance whose
+   `ApplicationSyntaxReference` is `null` from the structured records it attaches to the
+   `Normalized_SyntaxTree`. Such instances are compiler-synthesized attributes (e.g.,
+   `[CompilerGenerated]` on async state-machine types, `[IteratorStateMachine]` on iterator
+   methods) that have no corresponding syntax in the source file. This exclusion SHALL be applied
+   uniformly across all declaration kinds — types, members, parameters, return values,
+   assembly-level, and module-level attribute lists — and SHALL be silent (no diagnostic emitted).
 
 ---
 

@@ -1,0 +1,1 @@
+// NuGet packages test fixture

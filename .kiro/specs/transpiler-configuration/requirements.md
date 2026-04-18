@@ -65,7 +65,7 @@ This document specifies the requirements for the **Configuration Service** of th
    - `bool get barrelFiles` — returns whether barrel export files are generated; default: false
    - `Map<String, String> get namespacePrefixAliases` — returns namespace prefix replacement map; default: empty map
    - `bool get autoResolveConflicts` — returns whether namespace conflicts are auto-resolved; default: false
-   - `EventStrategy get eventStrategy` — returns `stream` or `callback`; default: `stream`
+   - `EventStrategy get eventStrategy` — returns `stream`; default: `stream`
    - `Map<String, EventMappingOverride> get eventMappings` — returns per-event overrides; default: empty map
    - `Map<String, String> get packageMappings` — returns NuGet package name → Dart package name overrides; default: empty map (`package_mappings` in `transpiler.yaml`)
    - `String? get sdkPath` — returns explicit .NET SDK path override; default: null
@@ -74,6 +74,13 @@ This document specifies the requirements for the **Configuration Service** of th
    - `Map<String, StructMappingOverride> get structMappings` — returns per-struct BCL overrides; default: empty map
    - `NamingConventions get namingConventions` — returns naming convention settings; default: all Dart-idiomatic defaults
    - `Map<String, bool> get experimentalFeatures` — returns feature-flag toggles for in-progress features; default: empty map (`experimental` in `transpiler.yaml`)
+   - `Map<String, dynamic> get nugetMappings` — returns full NuGet registry override entries (package ID → `MappingEntry` record); default: empty map (`nuget_mappings` in `transpiler.yaml`). Distinct from `packageMappings`: `packageMappings` maps package names to Dart package names (string→string), while `nugetMappings` carries full registry records (version range, shim path, tier override, etc.)
+   - `String? get nugetCachePath` — returns local directory path to use as the NuGet package cache; default: null (`nuget_cache_path` in `transpiler.yaml`)
+   - `List<String> get tier2SourcePaths` — returns ordered list of local directory paths where Tier 2 package source trees can be found; default: empty list (`tier2_source_paths` in `transpiler.yaml`)
+   - `List<String> get excludePackages` — returns list of NuGet package IDs to exclude from the Package_Graph entirely; default: empty list (`exclude_packages` in `transpiler.yaml`)
+   - `Map<String, int> get forceTier` — returns map from NuGet package ID to tier (1, 2, or 3), overriding automatic classification; default: empty map (`force_tier` in `transpiler.yaml`)
+   - `bool get transpileTier2` — when false, all Tier 2 packages are downgraded to Tier 3 and handled via stubs; default: true (`transpile_tier2` in `transpiler.yaml`)
+   - `String? get mappingRegistryPath` — returns path to an external YAML file to merge as an additional NuGet mapping registry source; default: null (`mapping_registry_path` in `transpiler.yaml`)
 2. ALL accessor methods SHALL be pure (no side effects, no I/O) after the Config_Object is constructed.
 3. THE `IConfigService` interface SHALL be the only mechanism by which pipeline modules access configuration; direct file I/O or YAML parsing within pipeline modules is forbidden.
 4. THE Config_Service SHALL be constructed once at pipeline startup and passed to all pipeline modules via dependency injection or an equivalent mechanism; it SHALL NOT use global/static mutable state.

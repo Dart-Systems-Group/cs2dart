@@ -56,7 +56,7 @@ final class ConfigValidator {
   };
 
   static const _validLinqStrategies = {'preserve_functional', 'lower_to_loops'};
-  static const _validEventStrategies = {'stream', 'callback'};
+  static const _validEventStrategies = {'stream'};
 
   /// Validates [raw] against the schema.
   ///

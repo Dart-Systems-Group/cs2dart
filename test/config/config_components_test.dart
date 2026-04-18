@@ -207,7 +207,7 @@ void main() {
         barrelFiles: true,
         rootNamespace: 'TestNS',
         autoResolveConflicts: true,
-        eventStrategy: EventStrategy.callback,
+        eventStrategy: EventStrategy.stream,
         sdkPath: '/sdk',
         nugetFeedUrls: ['https://example.com/feed'],
         namespaceMappings: {'A': 'b'},
@@ -251,7 +251,7 @@ void main() {
     });
 
     test('eventStrategy accessor delegates to ConfigObject', () {
-      expect(service.eventStrategy, EventStrategy.callback);
+      expect(service.eventStrategy, EventStrategy.stream);
     });
 
     test('eventMappings accessor delegates to ConfigObject', () {

@@ -1,21 +1,16 @@
 /// Controls how C# events are transpiled to Dart.
+///
+/// Only [stream] is supported; C# events are always emitted as Dart [Stream]s.
 enum EventStrategy {
   /// Emit events as Dart [Stream]s (YAML: "stream").
-  stream,
-
-  /// Emit events as callback functions (YAML: "callback").
-  callback;
+  stream;
 
   /// The YAML string value for this strategy.
-  String get yamlValue => switch (this) {
-        EventStrategy.stream => 'stream',
-        EventStrategy.callback => 'callback',
-      };
+  String get yamlValue => 'stream';
 
   /// Returns the [EventStrategy] for the given YAML string, or null if unrecognized.
   static EventStrategy? fromYaml(String value) => switch (value) {
         'stream' => EventStrategy.stream,
-        'callback' => EventStrategy.callback,
         _ => null,
       };
 }
